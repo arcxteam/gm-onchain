@@ -36,7 +36,17 @@ ABI = [
 
 # Initialize Web3 connection
 web3 = Web3(Web3.HTTPProvider(RPC_URL))
+
+# Check if connected to the network
+if not web3.isConnected():
+    print("Failed to connect to the network.")
+    exit(1)
+
+# Initialize contract
 contract = web3.eth.contract(address=CONTRACT_ADDRESS, abi=ABI)
+
+# Debugging: Print contract functions
+print("Contract functions:", contract.all_functions())
 
 # Function to read private keys from file
 def load_accounts():
@@ -45,12 +55,26 @@ def load_accounts():
         with open(PRIVATE_KEY_FILE, 'r') as file:
             keys = file.readlines()
             for key in keys:
-                key = key.strip()
+                key = key.strip()  # Remove extra spaces/newlines
+                print(f"Attempting to load key: {key}")  # Debug: Show raw key
+
+                # Tambahkan '0x' jika tidak ada awalan
+                if not key.startswith('0x'):
+                    key = '0x' + key
+
+                # Validasi panjang private key
                 if len(key) == 66 and key.startswith('0x'):
                     accounts.append(key)
+                    print(f"Valid key loaded: {key}")  # Debug: Confirm valid key
+                else:
+                    print(f"Invalid key skipped: {key}")  # Debug: Show invalid key
+
         if not accounts:
             raise ValueError("No valid private keys found.")
         return accounts
+    except FileNotFoundError:
+        print(f"Error: File '{PRIVATE_KEY_FILE}' not found.")
+        exit(1)
     except Exception as e:
         print(f"Error loading private keys: {e}")
         exit(1)
@@ -83,14 +107,16 @@ def send_transaction(tx, private_key):
 # Function to build the transaction
 def build_transaction(sender, recipient):
     try:
-        # Build data for the gmTo function
-        data = contract.functions.gmTo(recipient).buildTransaction({
+        # Build transaction data
+        tx_data = {
             'from': sender,
-            'gas': 50000,  # You can adjust this
+            'to': CONTRACT_ADDRESS,
+            'gas': 50000,  # Adjust gas limit if needed
             'gasPrice': get_gas_price(),
             'nonce': web3.eth.getTransactionCount(sender),
-        })
-        return data
+            'data': contract.encodeABI(fn_name='gmTo', args=[recipient]),
+        }
+        return tx_data
     except Exception as e:
         print(f"Error building transaction: {e}")
         return None
@@ -122,7 +148,7 @@ def main():
         for account in accounts:
             execute_gm(account, recipient)
             time.sleep(COOLDOWN_SUCCESS)  # Wait for a few seconds before next execution
-        time.sleep(3 * 60)  # Execute the GM task every 3 minutes
+        time.sleep(1 * 60)  # Execute the GM task every 3 minutes
 
 if __name__ == "__main__":
     main()
