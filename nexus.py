@@ -8,15 +8,34 @@ load_dotenv()
 
 # Configuration for Nexus Contract and RPC
 RPC_URL = 'https://rpc.nexus.xyz'
-CONTRACT_ADDRESS = '0x0d95Bee83E3e8B7b585CfB1f2bdeE7A6fFfbc119'  # Nexus GM Contract Address
+CONTRACT_ADDRESS = '0x0d95Bee83E3e8B7b585CfB1f2bdeE7A6fFfbc119'  # NexusGM Contract Address
 PRIVATE_KEY_FILE = 'private_keys.txt'  # File with private keys
 MAX_RETRIES = 5  # Maximum retries for failed transactions
 GAS_MULTIPLIER = 1.2  # Gas multiplier for faster transactions
-COOLDOWN_ERROR = 30  # Cooldown time after an error (in seconds)
-COOLDOWN_SUCCESS = 10  # Cooldown time after a successful transaction (in seconds)
+COOLDOWN_ERROR = 30  # Cooldown time after an error
+COOLDOWN_SUCCESS = 10  # Cooldown time after a successful transaction
 
 # Initialize Web3 connection
 web3 = Web3(Web3.HTTPProvider(RPC_URL))
+
+# ============================ WELCOME TO NEXUS-gM ============================
+def print_welcome_message():
+    welcome_banner = """
+ ██████╗██╗   ██╗ █████╗ ███╗   ██╗███╗   ██╗ ██████╗ ██████╗ ███████╗
+██╔════╝██║   ██║██╔══██╗████╗  ██║████╗  ██║██╔═══██╗██╔══██╗██╔════╝
+██║     ██║   ██║███████║██╔██╗ ██║██╔██╗ ██║██║   ██║██║  ██║█████╗  
+██║     ██║   ██║██╔══██║██║╚██╗██║██║╚██╗██║██║   ██║██║  ██║██╔══╝  
+╚██████╗╚██████╔╝██║  ██║██║ ╚████║██║ ╚████║╚██████╔╝██████╔╝███████╗
+ ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝  ╚═══╝ ╚═════╝ ╚═════╝ ╚══════╝
+=========================================================================
+                 Welcome To NexusGM Auto Interactive Tx/id
+            - CUANNODE By Greyscope&Co, Credit By Arcxteam -
+=========================================================================
+"""
+    print(welcome_banner)
+
+print_welcome_message()
+# ===========================================================================================
 
 # Custom function to check connection
 def is_connected(web3):
@@ -172,7 +191,7 @@ def main():
         for account in accounts:
             execute_gm(account)
             time.sleep(COOLDOWN_SUCCESS)
-        time.sleep(1 * 60)
+        time.sleep(2 * 60) # You can edit this looping send GM for default 2 minutes
 
 if __name__ == "__main__":
     main()
