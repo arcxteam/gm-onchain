@@ -15,6 +15,24 @@ GAS_MULTIPLIER = 1.2  # Gas multiplier for faster transactions
 COOLDOWN_ERROR = 30  # Cooldown time after an error (in seconds)
 COOLDOWN_SUCCESS = 10  # Cooldown time after a successful transaction (in seconds)
 
+# Initialize Web3 connection
+web3 = Web3(Web3.HTTPProvider(RPC_URL))
+
+# Custom function to check connection
+def is_connected(web3):
+    try:
+        # Check if the node responds to a simple RPC call
+        return web3.eth.chain_id is not None
+    except Exception:
+        return False
+
+# Check if connected to the network
+if not is_connected(web3):
+    print("Failed to connect to the network.")
+    exit(1)
+else:
+    print("Connected to the network.")
+
 # Load contract ABI
 ABI = [
     {
@@ -32,16 +50,6 @@ ABI = [
         "type": "function"
     }
 ]
-
-# Initialize Web3 connection
-web3 = Web3(Web3.HTTPProvider(RPC_URL))
-
-# Check if connected to the network
-if not web3.is_connected():  # Perubahan: isConnected -> is_connected
-    print("Failed to connect to the network.")
-    exit(1)
-else:
-    print("Connected to the network.")
 
 # Initialize contract
 contract = web3.eth.contract(address=CONTRACT_ADDRESS, abi=ABI)
@@ -124,7 +132,6 @@ def build_transaction(sender):
         # Get nonce for the sender account
         nonce = web3.eth.get_transaction_count(sender)
         print(f"Nonce for sender {sender}: {nonce}")
-
         # Build transaction data
         tx_data = {
             'from': sender,
@@ -161,7 +168,6 @@ def execute_gm(account):
 def main():
     # Load accounts from private keys
     accounts = load_accounts()
-
     while True:
         for account in accounts:
             execute_gm(account)
