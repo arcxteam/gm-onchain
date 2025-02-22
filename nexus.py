@@ -21,9 +21,11 @@ web3 = Web3(Web3.HTTPProvider(RPC_URL))
 # Custom function to check connection
 def is_connected(web3):
     try:
-        # Check if the node responds to a simple RPC call
-        return web3.eth.chain_id is not None
-    except Exception:
+        chain_id = web3.eth.chain_id
+        print(f"Connected to network with chain ID: {chain_id}")
+        return True
+    except Exception as e:
+        print(f"Failed to connect to the network: {e}")
         return False
 
 # Check if connected to the network
@@ -60,9 +62,7 @@ print("Contract functions:", contract.all_functions())
 # Function to convert private key to address
 def private_key_to_address(private_key):
     try:
-        # Convert private key to account object
         account = web3.eth.account.from_key(private_key)
-        # Return the public address
         return account.address
     except Exception as e:
         print(f"Error converting private key to address: {e}")
@@ -75,14 +75,11 @@ def load_accounts():
         with open(PRIVATE_KEY_FILE, 'r') as file:
             keys = file.readlines()
             for key in keys:
-                key = key.strip()  # Remove extra spaces/newlines
-                print(f"Attempting to load key: {key}")  # Debug: Show raw key
-                # Tambahkan '0x' jika tidak ada awalan
+                key = key.strip()
+                print(f"Attempting to load key: {key}")
                 if not key.startswith('0x'):
                     key = '0x' + key
-                # Validasi panjang private key
                 if len(key) == 66 and key.startswith('0x'):
-                    # Convert private key to address
                     address = private_key_to_address(key)
                     if address:
                         accounts.append({'private_key': key, 'address': address})
@@ -90,7 +87,7 @@ def load_accounts():
                     else:
                         print(f"Invalid key skipped: {key}")
                 else:
-                    print(f"Invalid key skipped: {key}")  # Debug: Show invalid key
+                    print(f"Invalid key skipped: {key}")
         if not accounts:
             raise ValueError("No valid private keys found.")
         return accounts
@@ -105,6 +102,7 @@ def load_accounts():
 def get_gas_price():
     try:
         gas_price = web3.eth.gas_price
+        print(f"Fetched gas price from RPC: {gas_price} Wei")
         return int(gas_price * GAS_MULTIPLIER)
     except Exception as e:
         print(f"Error fetching gas price: {e}")
@@ -116,30 +114,33 @@ def send_transaction(tx, private_key):
     while retries > 0:
         try:
             signed_tx = web3.eth.account.sign_transaction(tx, private_key)
-            tx_hash = web3.eth.send_raw_transaction(signed_tx.rawTransaction)
+            tx_hash = web3.eth.send_raw_transaction(signed_tx.raw_transaction)
             return tx_hash
         except Exception as e:
             retries -= 1
             print(f"Error sending transaction. Retries left: {retries}. Error: {e}")
             if retries == 0:
                 raise Exception("Transaction failed after maximum retries.")
-            time.sleep(COOLDOWN_ERROR)  # Wait before retrying
+            time.sleep(COOLDOWN_ERROR)
     return None
 
 # Function to build the transaction
 def build_transaction(sender):
     try:
-        # Get nonce for the sender account
-        nonce = web3.eth.get_transaction_count(sender)
+        nonce = web3.eth.get_transaction_count(sender, 'pending')
         print(f"Nonce for sender {sender}: {nonce}")
-        # Build transaction data
+        balance = web3.eth.get_balance(sender)
+        print(f"Balance for sender {sender}: {web3.from_wei(balance, 'ether')} ETH")
+        gas_price = get_gas_price()
+        if not gas_price:
+            raise ValueError("Failed to fetch gas price.")
         tx_data = {
             'from': sender,
             'to': CONTRACT_ADDRESS,
-            'gas': 50000,  # Adjust gas limit if needed
-            'gasPrice': get_gas_price(),
+            'gas': 50000,
+            'gasPrice': gas_price,
             'nonce': nonce,
-            'data': contract.encodeABI(fn_name='gm'),  # Use 'gm' function
+            'data': contract.encodeABI(fn_name='gm'),
         }
         print(f"Transaction data: {tx_data}")
         return tx_data
@@ -151,7 +152,7 @@ def build_transaction(sender):
 def execute_gm(account):
     try:
         private_key = account['private_key']
-        sender = account['address']  # Use the public address as sender
+        sender = account['address']
         tx_data = build_transaction(sender)
         if tx_data:
             tx_hash = send_transaction(tx_data, private_key)
@@ -166,13 +167,12 @@ def execute_gm(account):
 
 # Main function to execute the schedule
 def main():
-    # Load accounts from private keys
     accounts = load_accounts()
     while True:
         for account in accounts:
             execute_gm(account)
-            time.sleep(COOLDOWN_SUCCESS)  # Wait for a few seconds before next execution
-        time.sleep(1 * 60)  # Execute the GM task every 1 minute
+            time.sleep(COOLDOWN_SUCCESS)
+        time.sleep(1 * 60)
 
 if __name__ == "__main__":
     main()
