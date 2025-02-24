@@ -8,7 +8,7 @@ load_dotenv()
 
 # Configuration for Nexus Contract and RPC
 RPC_URL = 'https://rpc.nexus.xyz'
-CONTRACT_ADDRESS = '0x0d95Bee83E3e8B7b585CfB1f2bdeE7A6fFfbc119'  # NexusGM Contract Address
+CONTRACT_ADDRESS = '0x06Ed963C84575F0f3508E1aC663628Fed5692B6b'  # NexusGM Contract Address
 PRIVATE_KEY_FILE = 'private_keys.txt'  # File with private keys
 MAX_RETRIES = 5  # Maximum retries for failed transactions
 GAS_MULTIPLIER = 1.2  # Gas multiplier for faster transactions
