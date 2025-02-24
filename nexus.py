@@ -54,7 +54,7 @@ if not is_connected(web3):
 else:
     print("Connected to the network.")
 
-# Load contract ABI
+# Load contract ABI (Lengkap)
 ABI = [
     {
         "inputs": [],
@@ -64,9 +64,23 @@ ABI = [
         "type": "function"
     },
     {
+        "inputs": [{"internalType": "address", "name": "recipient", "type": "address"}, {"internalType": "string", "name": "message", "type": "string"}],
+        "name": "gmTo",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
         "inputs": [{"internalType": "address", "name": "user", "type": "address"}],
         "name": "lastGM",
-        "outputs": [{"internalType": "uint256", "name": "lastGM", "type": "uint256"}],
+        "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "getTotalGMs",
+        "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
         "stateMutability": "view",
         "type": "function"
     }
@@ -117,14 +131,16 @@ def load_accounts():
         print(f"Error loading private keys: {e}")
         exit(1)
 
-# Function to handle gas price update
-def get_gas_price():
+# Function to get EIP-1559 gas prices
+def get_gas_prices():
     try:
-        gas_price = web3.eth.gas_price
-        print(f"Fetched gas price from RPC: {gas_price} Wei")
-        return int(gas_price * GAS_MULTIPLIER)
+        fee_history = web3.eth.fee_history(1, 'latest')
+        base_fee = fee_history['baseFeePerGas'][0]
+        max_priority = web3.to_wei(2, 'gwei')  # Priority fee tetap
+        max_fee = base_fee + max_priority
+        return {'maxFeePerGas': max_fee, 'maxPriorityFeePerGas': max_priority}
     except Exception as e:
-        print(f"Error fetching gas price: {e}")
+        print(f"Error fetching gas prices: {e}")
         return None
 
 # Function to send transaction with retry logic
@@ -146,20 +162,30 @@ def send_transaction(tx, private_key):
 # Function to build the transaction
 def build_transaction(sender):
     try:
-        nonce = web3.eth.get_transaction_count(sender, 'pending')
-        print(f"Nonce for sender {sender}: {nonce}")
+        # Cek saldo
         balance = web3.eth.get_balance(sender)
-        print(f"Balance for sender {sender}: {web3.from_wei(balance, 'ether')} ETH")
-        gas_price = get_gas_price()
-        if not gas_price:
-            raise ValueError("Failed to fetch gas price.")
+        if balance < web3.to_wei(0.001, 'ether'):  # Minimum 0.001 ETH
+            print(f"Saldo tidak cukup untuk {sender}.")
+            return None
+
+        # Dapatkan parameter gas EIP-1559
+        gas_prices = get_gas_prices()
+        if not gas_prices:
+            return None
+
+        # Estimasi gas limit
+        gas_estimate = contract.functions.gm().estimate_gas({'from': sender})
+
+        # Bangun transaksi
         tx_data = {
             'from': sender,
             'to': CONTRACT_ADDRESS,
-            'gas': 50000,
-            'gasPrice': gas_price,
-            'nonce': nonce,
+            'gas': gas_estimate,
+            'maxFeePerGas': gas_prices['maxFeePerGas'],
+            'maxPriorityFeePerGas': gas_prices['maxPriorityFeePerGas'],
+            'nonce': web3.eth.get_transaction_count(sender, 'pending'),
             'data': contract.encodeABI(fn_name='gm'),
+            'chainId': web3.eth.chain_id
         }
         print(f"Transaction data: {tx_data}")
         return tx_data
@@ -191,7 +217,7 @@ def main():
         for account in accounts:
             execute_gm(account)
             time.sleep(COOLDOWN_SUCCESS)
-        time.sleep(2 * 60) # You can edit this looping send GM for default 2 minutes
+        time.sleep(2 * 60)  # Looping setiap 2 menit
 
 if __name__ == "__main__":
     main()
