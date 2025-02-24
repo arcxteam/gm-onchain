@@ -1,17 +1,15 @@
-# Running Gokite.ai Automation Agents AI
+# A Completed Guides Running GM-Onchain Testnet & Mainnet Interaction
 
-![Gokite](.png)
-
-Kite AI is the first purpose-built foundational blockchain for AI, designed to empower fair and transparent collaboration across data, models, and agents. Proof of Attributed Intelligence (PoAI) ensures that contributors are fairly rewarded, and every interaction is tracked with transparency.
+![pict](.png)
 
 ## Here We Go...GAS 
 
-**`Is there incentivized?` ![Confirm](https://img.shields.io/badge/confirm-yes-brightgreen)**
+**`Is there safe?` ![Confirm](https://img.shields.io/badge/confirm-yes-brightgreen)**
 
 > [!IMPORTANT]
-> Aero Incentivized Testnet, Earn Rewards While You Explore AI. Today’s launch marks Stage 1: Aero. As we evolve toward our mainnet, the testnet will progress through multiple phases **Aero — Lift Off -> Ozone -> Strato -> Voyager -> Lunar — Mainnet** Transition to the fully launched mainnet. `Note: These phases are flexible and may be adjusted or expanded as our project evolves.` [Read Here](https://medium.com/@KiteAI/introducing-kite-ai-testnet-v1-aero-d1d7aca894fd)
+> I am not responsible for any loss or damage caused by this automation interactive (bot). Use it at your own risk are farming network on mode testnet or mainnet tx/id. 
 
----
+But I assured, that all of this is safe starting from the smart contract has been verified and this is only limited network test to hello to say as familiar GM (good morning) on-chain interactive.
 
 ## 🦾 Bot Features
 - Note: I am not responsible for any loss or damage caused by this bot. Use it at your own risk are banned.
