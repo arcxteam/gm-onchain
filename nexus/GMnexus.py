@@ -18,7 +18,7 @@ COOLDOWN_SUCCESS = 10  # Cooldown time after a successful transaction
 # Initialize Web3 connection
 web3 = Web3(Web3.HTTPProvider(RPC_URL))
 
-# ============================ WELCOME TO NEXUS-gM ============================
+# ============================ WELCOME TO GM ONCHAIN ============================
 def print_welcome_message():
     welcome_banner = """
  ██████╗██╗   ██╗ █████╗ ███╗   ██╗███╗   ██╗ ██████╗ ██████╗ ███████╗
@@ -28,7 +28,7 @@ def print_welcome_message():
 ╚██████╗╚██████╔╝██║  ██║██║ ╚████║██║ ╚████║╚██████╔╝██████╔╝███████╗
  ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝  ╚═══╝ ╚═════╝ ╚═════╝ ╚══════╝
 =========================================================================
-                 Welcome To NexusGM Auto Interactive Tx/id
+         Welcome to GM-Onchain Testnet & Mainnet Auto Interactive
             - CUANNODE By Greyscope&Co, Credit By Arcxteam -
 =========================================================================
 """
@@ -54,7 +54,7 @@ if not is_connected(web3):
 else:
     print("Connected to the network.")
 
-# Load contract ABI (Lengkap)
+# Load contract ABI
 ABI = [
     {
         "inputs": [],
@@ -162,13 +162,13 @@ def send_transaction(tx, private_key):
 # Function to build the transaction
 def build_transaction(sender):
     try:
-        # Cek saldo
+        # Check balances
         balance = web3.eth.get_balance(sender)
         if balance < web3.to_wei(0.001, 'ether'):  # Minimum 0.001 ETH
-            print(f"Saldo tidak cukup untuk {sender}.")
+            print(f"Saldo lo kagak cukup dah {sender}.")
             return None
 
-        # Dapatkan parameter gas EIP-1559
+        # Used parameter gas EIP-1559
         gas_prices = get_gas_prices()
         if not gas_prices:
             return None
@@ -176,7 +176,7 @@ def build_transaction(sender):
         # Estimasi gas limit
         gas_estimate = contract.functions.gm().estimate_gas({'from': sender})
 
-        # Bangun transaksi
+        # start tx-id
         tx_data = {
             'from': sender,
             'to': CONTRACT_ADDRESS,
@@ -217,7 +217,7 @@ def main():
         for account in accounts:
             execute_gm(account)
             time.sleep(COOLDOWN_SUCCESS)
-        time.sleep(2 * 60)  # Looping setiap 2 menit
+        time.sleep(1 * 60)  # Looping 2m
 
 if __name__ == "__main__":
     main()
