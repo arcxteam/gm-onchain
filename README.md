@@ -7,14 +7,14 @@
 **`Is there safe?` ![Confirm](https://img.shields.io/badge/confirm-yes-brightgreen)**
 
 > [!IMPORTANT]
-> I am not responsible for any loss or damage caused by this automation interactive (bot). Use it at your own risk are farming network on mode testnet or mainnet tx/id. 
+> I am not responsible for any loss or damage caused by this automation interactive (bot). Use it at your own risk are farming network on mode **testnet or mainnet** tx/id. But I assured, that all of this is safe starting from the smart contract has been verified and this is only limited test network like to say hello i.e familiar GM (good morning) on-chain interactive.
 
-But I assured, that all of this is safe starting from the smart contract has been verified and this is only limited network test to hello to say as familiar GM (good morning) on-chain interactive.
-
-## 🦾 Bot Features
-- Note: I am not responsible for any loss or damage caused by this bot. Use it at your own risk are banned.
-- Automated Daily Agent Interactions script.
-- ~Connection by Proxy (support socks/5 http/s)~
+## 🦾 Script Features
+- Fecthing call gwei/gas fees direct to API-RPC with implement EIP-1559 for low cost
+- Automated single call `gM` `gMTo` every minutes
+- Multi account
+- Running on PM2 (procesess management)
+- 
 
 ## How to do...?
 - Gokite.ai Account, Register here: [https://testnet.gokite.ai](https://testnet.gokite.ai/?r=Y2d9Cgy2)
