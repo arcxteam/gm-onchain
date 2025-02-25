@@ -2,21 +2,42 @@ import time
 from web3 import Web3
 from dotenv import load_dotenv
 import os
+from colorama import Fore, Style, init
+
+# Initialize colorama for colored terminal output
+init()
 
 # Load environment variables from .env file
 load_dotenv()
 
-# Configuration for MONAD Contract and RPC
+# Configuration for GMonad Contract and RPC
 RPC_URL = 'https://testnet-rpc.monad.xyz'
-CONTRACT_ADDRESS = '0xdF0d5abC614EF45C4bCEA121624644523BAc80b7'  # GM Contract Address
-PRIVATE_KEY_FILE = 'private_keys.txt'
-MAX_RETRIES = 5
-GAS_MULTIPLIER = 1.2
-COOLDOWN_ERROR = 30
-COOLDOWN_SUCCESS = 10
+CONTRACT_ADDRESS = '0xdF0d5abC614EF45C4bCEA121624644523BAc80b7'  # GMonad Contract Address
+PRIVATE_KEY_FILE = 'private_keys.txt'  # File with private keys
+ENV_FILE = '.env'  # .env file
+MAX_RETRIES = 5  # Maximum retries for failed transactions
+GAS_MULTIPLIER = 1.2  # Gas multiplier for faster transactions
+COOLDOWN_ERROR = 30  # Cooldown time after an error
+COOLDOWN_SUCCESS = 10  # Cooldown time after a successful transaction
+LOOP_WAIT_TIME = 60  # 1 minutes every gM txhash, you can edit this in seconds
 
 # Initialize Web3 connection
 web3 = Web3(Web3.HTTPProvider(RPC_URL))
+
+# Transaction counter
+tx_counter = 0
+
+# Chain ID to symbol mapping
+CHAIN_SYMBOLS = {
+    1: "ETH",     # Ethereum Mainnet
+    10: "OP",     # Optimism
+    56: "BNB",    # BNB Chain
+    137: "MATIC", # Polygon
+    42161: "ARB", # Arbitrum
+    43114: "AVAX", # Avalanche
+    10143: "MON", # Monad
+    # Add more chains as needed
+}
 
 # ============================ WELCOME TO GM ONCHAIN ============================
 def print_welcome_message():
@@ -30,8 +51,7 @@ def print_welcome_message():
 =========================================================================
          Welcome to GM-Onchain Testnet & Mainnet Auto Interactive
             - CUANNODE By Greyscope&Co, Credit By Arcxteam -
-=========================================================================
-"""
+========================================================================="""
     print(welcome_banner)
 
 print_welcome_message()
@@ -41,18 +61,22 @@ print_welcome_message()
 def is_connected(web3):
     try:
         chain_id = web3.eth.chain_id
-        print(f"Connected to network with chain ID: {chain_id}")
-        return True
+        print(f"1 Connected to network with chain ID: {chain_id}")
+        return chain_id
     except Exception as e:
         print(f"Failed to connect to the network: {e}")
-        return False
+        return None
 
 # Check if connected to the network
-if not is_connected(web3):
+chain_id = is_connected(web3)
+if not chain_id:
     print("Failed to connect to the network.")
     exit(1)
 else:
-    print("Connected to the network.")
+    print("2 Connected to the network.")
+
+# Determine token symbol based on chain ID
+token_symbol = CHAIN_SYMBOLS.get(chain_id, "ETH")  # Default to ETH if chain not found
 
 # Load contract ABI
 ABI = [
@@ -89,9 +113,6 @@ ABI = [
 # Initialize contract
 contract = web3.eth.contract(address=CONTRACT_ADDRESS, abi=ABI)
 
-# Debugging: Print contract functions
-print("Contract functions:", contract.all_functions())
-
 # Function to convert private key to address
 def private_key_to_address(private_key):
     try:
@@ -101,35 +122,70 @@ def private_key_to_address(private_key):
         print(f"Error converting private key to address: {e}")
         return None
 
-# Function to read private keys from file
+# Function to read private keys from file or env
 def load_accounts():
     accounts = []
+    
+    # Try loading from .env file first
     try:
-        with open(PRIVATE_KEY_FILE, 'r') as file:
-            keys = file.readlines()
-            for key in keys:
-                key = key.strip()
-                print(f"Attempting to load key: {key}")
-                if not key.startswith('0x'):
-                    key = '0x' + key
-                if len(key) == 66 and key.startswith('0x'):
-                    address = private_key_to_address(key)
-                    if address:
-                        accounts.append({'private_key': key, 'address': address})
-                        print(f"Valid key loaded: {key} -> Address: {address}")
-                    else:
-                        print(f"Invalid key skipped: {key}")
-                else:
-                    print(f"Invalid key skipped: {key}")
-        if not accounts:
-            raise ValueError("No valid private keys found.")
-        return accounts
-    except FileNotFoundError:
-        print(f"Error: File '{PRIVATE_KEY_FILE}' not found.")
-        exit(1)
+        if os.path.exists(ENV_FILE):
+            load_dotenv(ENV_FILE)
+            private_key = os.getenv('PRIVATE_KEY')
+            if private_key:
+                if not private_key.startswith('0x'):
+                    private_key = '0x' + private_key
+                address = private_key_to_address(private_key)
+                if address:
+                    accounts.append({'private_key': private_key, 'address': address})
+                    print(f"3 Attempting to load wallet... {Fore.GREEN}Status: OK Gas!!!{Style.RESET_ALL}")
+                    print(f"4 Wallet loaded successfully -> EVM Address: {address}")
     except Exception as e:
-        print(f"Error loading private keys: {e}")
+        print(f"Error loading from .env: {e}")
+    
+    # If no accounts loaded from .env, try private_keys.txt
+    if not accounts:
+        try:
+            if os.path.exists(PRIVATE_KEY_FILE):
+                with open(PRIVATE_KEY_FILE, 'r') as file:
+                    keys = file.readlines()
+                    for key in keys:
+                        key = key.strip()
+                        if not key.startswith('0x'):
+                            key = '0x' + key
+                        if len(key) == 66 and key.startswith('0x'):
+                            address = private_key_to_address(key)
+                            if address:
+                                accounts.append({'private_key': key, 'address': address})
+                                print(f"3 Attempting to load wallet... {Fore.GREEN}Status: OK Gas!!!{Style.RESET_ALL}")
+                                print(f"4 Wallet loaded successfully -> EVM Address: {address}")
+                            else:
+                                print(f"3 Attempting to load wallet... {Fore.RED}Status: FAILED{Style.RESET_ALL}")
+                        else:
+                            print(f"3 Attempting to load wallet... {Fore.RED}Status: FAILED{Style.RESET_ALL}")
+                            print(f"Invalid key format: {key}")
+        except FileNotFoundError:
+            print(f"Error: Neither .env nor {PRIVATE_KEY_FILE} found.")
+            exit(1)
+        except Exception as e:
+            print(f"Error loading private keys: {e}")
+            exit(1)
+    
+    if not accounts:
+        print("No valid private keys found in either .env or private_keys.txt")
         exit(1)
+        
+    return accounts
+
+# Function to get wallet balance
+def get_wallet_balance(address):
+    try:
+        balance_wei = web3.eth.get_balance(address)
+        balance_eth = web3.from_wei(balance_wei, 'ether')
+        print(f"5 Wallet Balance: {balance_eth:.4f} {token_symbol}")
+        return balance_wei
+    except Exception as e:
+        print(f"Error getting balance: {e}")
+        return 0
 
 # Function to get EIP-1559 gas prices
 def get_gas_prices():
@@ -138,20 +194,33 @@ def get_gas_prices():
         base_fee = fee_history['baseFeePerGas'][0]
         max_priority = web3.to_wei(2, 'gwei')  # Priority fees
         max_fee = base_fee + max_priority
-        gas_prices = {'maxFeePerGas': max_fee, 'maxPriorityFeePerGas': max_priority}
-        print(f"Fetched gas prices: {gas_prices}")
-        return gas_prices
+        
+        # Convert to gwei for display
+        max_fee_gwei = web3.from_wei(max_fee, 'gwei')
+        max_priority_gwei = web3.from_wei(max_priority, 'gwei')
+        
+        # Estimate gas limit for a typical transaction
+        gas_estimate = 22000  # Basic transaction
+        total_cost_wei = gas_estimate * max_fee
+        total_cost_eth = web3.from_wei(total_cost_wei, 'ether')
+        
+        print(f"6 Gas Prices: Max Fee Per Gas: {max_fee_gwei:.1f} Gwei | Priority Fee: {max_priority_gwei:.1f} Gwei (Est. cost: {total_cost_eth:.6f} {token_symbol})")
+        
+        return {'maxFeePerGas': max_fee, 'maxPriorityFeePerGas': max_priority}
     except Exception as e:
         print(f"Error fetching gas prices: {e}")
         return None
 
 # Function to send transaction with retry logic
 def send_transaction(tx, private_key):
+    global tx_counter
     retries = MAX_RETRIES
     while retries > 0:
         try:
             signed_tx = web3.eth.account.sign_transaction(tx, private_key)
             tx_hash = web3.eth.send_raw_transaction(signed_tx.rawTransaction)
+            tx_counter += 1
+            print(f"8 Transaction Sent Successfully with Total tx/id {tx_counter} -> Tx Hash: {tx_hash.hex()}")
             return tx_hash
         except Exception as e:
             retries -= 1
@@ -161,12 +230,9 @@ def send_transaction(tx, private_key):
             time.sleep(COOLDOWN_ERROR)
     return None
 
-# Function to build the transaction
-def build_transaction(sender):
+# Function to build transaction for gm
+def build_gm_transaction(sender):
     try:
-        # Check balances
-        balance = web3.eth.get_balance(sender)
-        
         # Get EIP-1559 gas prices
         gas_prices = get_gas_prices()
         if not gas_prices:
@@ -175,24 +241,22 @@ def build_transaction(sender):
         # Estimate gas limit
         gas_estimate = contract.functions.gm().estimate_gas({'from': sender})
         
-        # Calculate required balance
-        required_balance = gas_estimate * (gas_prices['maxFeePerGas'] + gas_prices['maxPriorityFeePerGas'])
-        if balance < required_balance:
-            print(f"Saldo gak cukup. modal bang: {web3.from_wei(required_balance, 'ether')} ETH")
-            return None
+        # Get nonce
+        nonce = web3.eth.get_transaction_count(sender, 'pending')
         
         # Build transaction data
         tx_data = {
             'from': sender,
             'to': CONTRACT_ADDRESS,
-            'gas': gas_estimate,
+            'gas': int(gas_estimate * GAS_MULTIPLIER),
             'maxFeePerGas': gas_prices['maxFeePerGas'],
             'maxPriorityFeePerGas': gas_prices['maxPriorityFeePerGas'],
-            'nonce': web3.eth.get_transaction_count(sender, 'pending'),
-            'data': contract.encodeABI(fn_name='gm', args=[]),  # Ensure this is correct
+            'nonce': nonce,
+            'data': contract.encodeABI(fn_name='gm', args=[]),
             'chainId': web3.eth.chain_id
         }
-        print(f"Transaction data: {tx_data}")
+        
+        print(f"7 Transaction OnChain Data Prepared to Say: {Fore.GREEN}hELLO gM with nonce {nonce}{Style.RESET_ALL}")
         return tx_data
     except Exception as e:
         print(f"Error building transaction: {e}")
@@ -203,17 +267,42 @@ def execute_gm(account):
     try:
         private_key = account['private_key']
         sender = account['address']
-        tx_data = build_transaction(sender)
+        
+        # Get initial balance
+        initial_balance = get_wallet_balance(sender)
+        
+        # Build and send transaction
+        tx_data = build_gm_transaction(sender)
         if tx_data:
             tx_hash = send_transaction(tx_data, private_key)
             if tx_hash:
-                print(f"Transaction successful: {tx_hash.hex()}")
+                # Wait for transaction confirmation
+                time.sleep(5)
+                
+                # Get updated balance
+                new_balance = web3.eth.get_balance(sender)
+                new_balance_eth = web3.from_wei(new_balance, 'ether')
+                print(f"9 Checking last balance: {new_balance_eth:.4f} {token_symbol}")
+                
+                return True
             else:
                 print("Transaction failed.")
         else:
             print("Failed to build transaction.")
     except Exception as e:
         print(f"Error executing GM: {e}")
+    
+    return False
+
+# Function to display countdown
+def countdown_timer(seconds):
+    print(f"{Fore.YELLOW}Waiting to sleep next GM...bang!!! for {seconds//60} minutes{Style.RESET_ALL}")
+    for i in range(seconds, 0, -1):
+        mins, secs = divmod(i, 60)
+        timer = f"{Fore.YELLOW}   Countdown: {mins:02d}:{secs:02d}{Style.RESET_ALL}"
+        print(timer, end="\r")
+        time.sleep(1)
+    print(" " * 50, end="\r")  # Clear the countdown line
 
 # Main function to execute the schedule
 def main():
@@ -222,7 +311,9 @@ def main():
         for account in accounts:
             execute_gm(account)
             time.sleep(COOLDOWN_SUCCESS)
-        time.sleep(1 * 60)  # Looping 1m
+        
+        # Wait for the next cycle with countdown
+        countdown_timer(LOOP_WAIT_TIME)
 
 if __name__ == "__main__":
     main()
