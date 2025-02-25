@@ -7,8 +7,7 @@
 **`Is there safe?` ![rating](https://img.shields.io/badge/yes_-★★★★★-brightgreen)**
 
 > [!IMPORTANT]
-> I am not responsible for any loss or damage caused by this automation interactive (bot). Use it at your own risk are farming network on mode **testnet or mainnet** tx/id. But I assured, that all of this is safe starting from the smart contract has been verified and this is only limited test network like to say hello i.e familiar `GM (good morning)` on-chain interactive.
-
+> I am not responsible for any loss or damage caused by this automation. Use it at your own risk, but I'm assured that it's safe since the smart contract has been verified and it's only limited to farming tx/id on testnet or mainnet. Let's start with a simple greeting, like **Good Morning**
 ## 🦾 Script Features
 - Fecthing call gwei/gas fees direct to API-RPC with implement EIP-1559 for low cost
 - Automated single call `gM` or `gMTo` every minutes/hours/daily
