@@ -41,17 +41,26 @@ CHAIN_SYMBOLS = {
 
 # ============================ WELCOME TO GM ONCHAIN ============================
 def print_welcome_message():
-    welcome_banner = """
+    COLOR_YELLOW = "\033[93m"
+    COLOR_GREEN = "\033[92m"
+    COLOR_CYAN = "\033[96m"
+    COLOR_BLUE = "\033[94m"
+    COLOR_RESET = "\033[0m"
+
+    welcome_banner = f"""
+{COLOR_YELLOW}
  ██████╗██╗   ██╗ █████╗ ███╗   ██╗███╗   ██╗ ██████╗ ██████╗ ███████╗
 ██╔════╝██║   ██║██╔══██╗████╗  ██║████╗  ██║██╔═══██╗██╔══██╗██╔════╝
 ██║     ██║   ██║███████║██╔██╗ ██║██╔██╗ ██║██║   ██║██║  ██║█████╗  
 ██║     ██║   ██║██╔══██║██║╚██╗██║██║╚██╗██║██║   ██║██║  ██║██╔══╝  
 ╚██████╗╚██████╔╝██║  ██║██║ ╚████║██║ ╚████║╚██████╔╝██████╔╝███████╗
  ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝  ╚═══╝ ╚═════╝ ╚═════╝ ╚══════╝
-=========================================================================
-         Welcome to GM-Onchain Testnet & Mainnet Auto Interactive
-            - CUANNODE By Greyscope&Co, Credit By Arcxteam -
-========================================================================="""
+{COLOR_RESET}
+{COLOR_GREEN}========================================================================={COLOR_RESET}
+{COLOR_CYAN}         Welcome to GM-Onchain Testnet & Mainnet Auto Interactive{COLOR_RESET}
+{COLOR_BLUE}            - CUANNODE By Greyscope&Co, Credit By Arcxteam -{COLOR_RESET}
+{COLOR_GREEN}========================================================================={COLOR_RESET}
+"""
     print(welcome_banner)
 
 print_welcome_message()
