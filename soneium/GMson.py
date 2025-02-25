@@ -37,7 +37,7 @@ CHAIN_SYMBOLS = {
     43114: "AVAX", # Avalanche
     10143: "MONAD", # Monad
     393: "NEXUS", # NEXUS
-    1868: "ETH-SONEIUM" # Soneium Mainnet
+    1868: "ETH-SONEIUM", # Soneium Mainnet
     # Add more chains as needed
 }
 
