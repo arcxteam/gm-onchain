@@ -2,7 +2,7 @@ import time
 from web3 import Web3
 from dotenv import load_dotenv
 import os
-from colorama import init, Fore, Style
+from colorama import Fore, Style, init
 
 # Init colorama
 init(autoreset=True)
@@ -19,7 +19,7 @@ MAX_RETRIES = 5  # Maximum retries for failed transactions
 GAS_MULTIPLIER = 1.2  # Gas multiplier for faster transactions
 COOLDOWN_ERROR = 30  # Cooldown time after an error
 COOLDOWN_SUCCESS = 10  # Cooldown time after a successful transaction
-LOOP_WAIT_TIME = 60  # 1 minutes every gM txhash, you can edit this in seconds
+LOOP_WAIT_TIME = 90  # 1 minutes every gM txhash, you can edit this in seconds
 
 # Initialize Web3 connection
 web3 = Web3(Web3.HTTPProvider(RPC_URL))
@@ -30,16 +30,18 @@ tx_counter = 0
 # Chain ID to symbol mapping
 CHAIN_SYMBOLS = {
     1: "ETH",     # Ethereum Mainnet
-    10: "OP",     # Optimism
+    10: "ETH",     # Optimism
     56: "BNB",    # BNB Chain
     137: "MATIC", # Polygon
-    42161: "ARB", # Arbitrum
+    42161: "ETH", # Arbitrum
     43114: "AVAX", # Avalanche
-    10143: "MON", # Monad
+    10143: "MONAD", # Monad
+    393: "NEXUS", # NEXUS
     # Add more chains as needed
 }
 
-# ============================ WELCOME TO GM ONCHAIN ============================
+# Benner benner bang
+print(f"{Fore.GREEN}============================ WELCOME TO GM ONCHAIN ============================{Fore.RESET}")
 def print_welcome_message():
     welcome_banner = f"""
 {Fore.YELLOW}
@@ -52,11 +54,10 @@ def print_welcome_message():
 {Fore.RESET}
 {Fore.GREEN}========================================================================={Fore.RESET}
 {Fore.CYAN}         Welcome to GM-Onchain Testnet & Mainnet Auto Interactive{Fore.RESET}
-{Fore.BLUE}            - CUANNODE By Greyscope&Co, Credit By Arcxteam -{Fore.RESET}
+{Fore.YELLOW}            - CUANNODE By Greyscope&Co, Credit By Arcxteam -{Fore.RESET}
 {Fore.GREEN}========================================================================={Fore.RESET}
 """
     print(welcome_banner)
-
 print_welcome_message()
 
 # ===========================================================================================
@@ -64,7 +65,7 @@ print_welcome_message()
 def is_connected(web3):
     try:
         chain_id = web3.eth.chain_id
-        print(f"1 Connected to network with chain ID: {chain_id}")
+        print(f"1 Connected to network with chain ID: {Fore.GREEN}{chain_id}{Fore.RESET}")
         return chain_id
     except Exception as e:
         print(f"Failed to connect to the network: {e}")
@@ -73,10 +74,11 @@ def is_connected(web3):
 # Check if connected to the network
 chain_id = is_connected(web3)
 if not chain_id:
-    print("Failed to connect to the network.")
+    print("Failed to connect to the network")
     exit(1)
 else:
-    print("2 Connected to the network.")
+    chain_name = CHAIN_SYMBOLS.get(chain_id, "Unknown")
+    print(f"2 Connected to the network: {Fore.YELLOW}{chain_name}{Fore.RESET}")
 
 # Determine token symbol based on chain ID
 token_symbol = CHAIN_SYMBOLS.get(chain_id, "ETH")  # Default to ETH if chain not found
@@ -184,7 +186,7 @@ def get_wallet_balance(address):
     try:
         balance_wei = web3.eth.get_balance(address)
         balance_eth = web3.from_wei(balance_wei, 'ether')
-        print(f"5 Wallet Balance: {balance_eth:.4f} {token_symbol}")
+        print(f"5 Wallet Balance: {Fore.YELLOW}{balance_eth:.4f} {token_symbol}{Fore.RESET}")
         return balance_wei
     except Exception as e:
         print(f"Error getting balance: {e}")
@@ -207,8 +209,8 @@ def get_gas_prices():
         total_cost_wei = gas_estimate * max_fee
         total_cost_eth = web3.from_wei(total_cost_wei, 'ether')
         
-        print(f"6 Gas Prices: Max Fee Per Gas: {max_fee_gwei:.1f} Gwei | Priority Fee: {max_priority_gwei:.1f} Gwei (Est. cost: {total_cost_eth:.6f} {token_symbol})")
-        
+        print(f"6 Gas Prices: Max Fee Per Gas: {max_fee_gwei:.1f} Gwei | Priority Fee: {max_priority_gwei:.1f} Gwei (Est. cost: {Fore.YELLOW}{total_cost_eth:.6f} {token_symbol}{Fore.RESET})")
+
         return {'maxFeePerGas': max_fee, 'maxPriorityFeePerGas': max_priority}
     except Exception as e:
         print(f"Error fetching gas prices: {e}")
@@ -223,13 +225,13 @@ def send_transaction(tx, private_key):
             signed_tx = web3.eth.account.sign_transaction(tx, private_key)
             tx_hash = web3.eth.send_raw_transaction(signed_tx.rawTransaction)
             tx_counter += 1
-            print(f"8 Transaction Sent Successfully with Total tx/id {tx_counter} -> Tx Hash: {tx_hash.hex()}")
+            print(f"8 Transaction Sent {Fore.GREEN}Successfully{Style.RESET_ALL} with Total TXiD {Fore.RED}{tx_counter}{Style.RESET_ALL} -> {Fore.GREEN}TxID Hash:{Style.RESET_ALL} {tx_hash.hex()}")
             return tx_hash
         except Exception as e:
             retries -= 1
             print(f"Error sending transaction. Retries left: {retries}. Error: {e}")
             if retries == 0:
-                raise Exception("Transaction failed after maximum retries.")
+                raise Exception("Transaction failed after maximum retries")
             time.sleep(COOLDOWN_ERROR)
     return None
 
@@ -285,7 +287,7 @@ def execute_gm(account):
                 # Get updated balance
                 new_balance = web3.eth.get_balance(sender)
                 new_balance_eth = web3.from_wei(new_balance, 'ether')
-                print(f"9 Checking last balance: {new_balance_eth:.4f} {token_symbol}")
+                print(f"9 Checking Last Balance: {Fore.YELLOW}{new_balance_eth:.4f} {token_symbol}{Fore.RESET}")
                 
                 return True
             else:
@@ -299,7 +301,7 @@ def execute_gm(account):
 
 # Function to display countdown
 def countdown_timer(seconds):
-    print(f"{Fore.YELLOW}Waiting to sleep next GM...bang!!! for {seconds//60} minutes{Style.RESET_ALL}")
+    print(f"{Fore.CYAN}Waiting to sleep next GM...bang!!! for {seconds//60} minutes{Style.RESET_ALL}")
     for i in range(seconds, 0, -1):
         mins, secs = divmod(i, 60)
         timer = f"{Fore.YELLOW}   Countdown: {mins:02d}:{secs:02d}{Style.RESET_ALL}"
