@@ -2,10 +2,10 @@ import time
 from web3 import Web3
 from dotenv import load_dotenv
 import os
-from colorama import Fore, Style, init
+from colorama import init, Fore, Style
 
-# Initialize colorama for colored terminal output
-init()
+# Init colorama
+init(autoreset=True)
 
 # Load environment variables from .env file
 load_dotenv()
@@ -41,25 +41,19 @@ CHAIN_SYMBOLS = {
 
 # ============================ WELCOME TO GM ONCHAIN ============================
 def print_welcome_message():
-    COLOR_YELLOW = "\033[93m"
-    COLOR_GREEN = "\033[92m"
-    COLOR_CYAN = "\033[96m"
-    COLOR_BLUE = "\033[94m"
-    COLOR_RESET = "\033[0m"
-
     welcome_banner = f"""
-{COLOR_YELLOW}
+{Fore.YELLOW}
  ██████╗██╗   ██╗ █████╗ ███╗   ██╗███╗   ██╗ ██████╗ ██████╗ ███████╗
 ██╔════╝██║   ██║██╔══██╗████╗  ██║████╗  ██║██╔═══██╗██╔══██╗██╔════╝
 ██║     ██║   ██║███████║██╔██╗ ██║██╔██╗ ██║██║   ██║██║  ██║█████╗  
 ██║     ██║   ██║██╔══██║██║╚██╗██║██║╚██╗██║██║   ██║██║  ██║██╔══╝  
 ╚██████╗╚██████╔╝██║  ██║██║ ╚████║██║ ╚████║╚██████╔╝██████╔╝███████╗
  ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝  ╚═══╝ ╚═════╝ ╚═════╝ ╚══════╝
-{COLOR_RESET}
-{COLOR_GREEN}========================================================================={COLOR_RESET}
-{COLOR_CYAN}         Welcome to GM-Onchain Testnet & Mainnet Auto Interactive{COLOR_RESET}
-{COLOR_BLUE}            - CUANNODE By Greyscope&Co, Credit By Arcxteam -{COLOR_RESET}
-{COLOR_GREEN}========================================================================={COLOR_RESET}
+{Fore.RESET}
+{Fore.GREEN}========================================================================={Fore.RESET}
+{Fore.CYAN}         Welcome to GM-Onchain Testnet & Mainnet Auto Interactive{Fore.RESET}
+{Fore.BLUE}            - CUANNODE By Greyscope&Co, Credit By Arcxteam -{Fore.RESET}
+{Fore.GREEN}========================================================================={Fore.RESET}
 """
     print(welcome_banner)
 
