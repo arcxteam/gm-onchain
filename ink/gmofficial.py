@@ -334,7 +334,7 @@ class GMScheduler:
                 'chainId': self.web3.eth.chain_id
             }
 
-            print(f"🔵 Transaction OnChain Data Prepared to Say: {Fore.GREEN}hELLO gM with nonce {nonce}{Style.RESET_ALL}")
+            print(f"🔵 Transaction OnChain Data Prepared to Say: {Fore.GREEN}hELLO...gM with nonce {nonce}{Style.RESET_ALL}")
             return tx
 
         except Exception as e:
@@ -509,7 +509,7 @@ def main():
             wait_until_next_gm(web3, contract, account['address'])  # Wait according to time
             scheduler.execute_gm(account)  # Run GM transaction
 
-        print(f"{Fore.YELLOW}☑️ All GM onchain completed. Waiting for next execution bang!!!...{Fore.RESET}")
+        print(f"{Fore.YELLOW}☑️ All gM onchain completed. Waiting for next execution bang!!!...{Fore.RESET}")
 
         # Restart after transactions are complete
         main()
