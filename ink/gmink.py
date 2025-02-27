@@ -12,7 +12,7 @@ load_dotenv()
 
 # Configuration for GMink Contract and RPC
 RPC_URL = 'https://rpc-gel.inkonchain.com'
-CONTRACT_ADDRESS = '0x2a5e9b3b961aF9AE375673Ab25d2270E18dB579f'  # GMink Contract Address
+CONTRACT_ADDRESS = '0x974fBb3C286fF89d62c507204406109a686080cD'  # GMink Contract Address
 PRIVATE_KEY_FILE = 'private_keys.txt'  # File with private keys
 ENV_FILE = '.env'  # .env file
 MAX_RETRIES = 5
@@ -27,20 +27,22 @@ web3 = Web3(Web3.HTTPProvider(RPC_URL))
 # Transaction counter
 tx_counter = 0
 
-# Chain ID to symbol mapping
+# ======================== Chain Symbol Mapping ========================
 CHAIN_SYMBOLS = {
-    1: "ETH",     # Ethereum Mainnet
-    10: "ETH",    # Optimism
-    56: "BNB",    # BNB Chain
-    137: "MATIC", # Polygon
-    42161: "ETH", # Arbitrum
-    43114: "AVAX", # Avalanche
-    10143: "MONAD", # Monad
-    393: "NEXUS", # NEXUS
-    1868: "ETH-SONEIUM", # Soneium Mainnet
-    167000: "ETH-TAIKO", # Taiko Mainnet
-    57073: "ETH-Ink", # Ink Mainnet
-    # Add more chains as needed
+    1: "ETH",
+    10: "ETH-Optimism",
+    1135: "ETH-Lisk",
+    480: "ETH-Worldchain",
+    8453: "ETH-Base",
+    130: "ETH-Unichain",
+    10143: "MONAD",
+    393: "NEXUS",
+    1868: "ETH-Soneium",
+    167000: "ETH-Taiko",
+    57073: "ETH-Ink",
+    5330: "ETH-Superseed",
+    34443: "ETH-Mode",
+    690: "ETH-Redstone",
 }
 
 # Benner benner bang
