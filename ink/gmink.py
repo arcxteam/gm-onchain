@@ -14,19 +14,19 @@ init(autoreset=True)
 # ======================== Configuration Module ========================
 CONFIG = {
     "RPC_URL": "https://rpc-gel.inkonchain.com",
-    "CONTRACT_ADDRESS": "0x974fBb3C286fF89d62c507204406109a686080cD",  # Updated contract address
+    "CONTRACT_ADDRESS": "0x974fBb3C286fF89d62c507204406109a686080cD",
     "PRIVATE_KEY_FILE": os.path.join(os.path.dirname(__file__), 'private_keys.txt'),
     "ENV_FILE": ".env",
     "MAX_RETRIES": 3,
     # Flexible Gas Fee Settings
-    "GAS_MULTIPLIER": 1.05,   # Buffer 5% of base fee
-    "MAX_PRIORITY_GWEI": 0.001,  # Max priority fee user-defined (0.001 Gwei default)
-    "GAS_LIMIT": 28006,  # More accurate estimate (standard GM transaction)
+    "GAS_MULTIPLIER": 1.05,
+    "MAX_PRIORITY_GWEI": 0.001,
+    "GAS_LIMIT": 28006,
     "COOLDOWN": {
         "SUCCESS": 10,
         "ERROR": 30
     },
-    "WAIT_TIME": 300  # Every 5 minutes, as per the new requirement
+    "WAIT_TIME": 900  # this seconds, can adjust anytime for default 15m
 }
 
 # ======================== Chain Symbol Mapping ========================
@@ -50,7 +50,7 @@ CHAIN_SYMBOLS = {
 # Transaction counter
 tx_counter = 0
 
-# ======================== ABI Definition ========================
+# ======================== ABI Contract ========================
 ABI = [
     {
         "inputs": [],
@@ -82,7 +82,7 @@ ABI = [
     }
 ]
 
-# ======================== Logging System ========================
+# ======================== Info Logging ========================
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -94,7 +94,7 @@ logger = logging.getLogger('gMfootprint')
 def short_address(address):
     return f"{address[:6]}...{address[-4:]}" if address else "Unknown address"
 
-# Banner
+# Banner bang!!
 print(f"{Fore.GREEN}============================ WELCOME TO GM ONCHAIN ============================{Fore.RESET}")
 def print_welcome_message():
     welcome_banner = f"""
@@ -114,7 +114,7 @@ def print_welcome_message():
     print(welcome_banner)
 print_welcome_message()
 
-# ===========================================================================================
+# ============================ Connection Web3 Wallet ===================================
 def is_connected(web3):
     try:
         chain_id = web3.eth.chain_id
@@ -124,7 +124,7 @@ def is_connected(web3):
         print(f"0️⃣ Failed to connect to the network: {e}")
         return None
 
-# ======================== Core Functionality Class ========================
+# ============================ Functionality Class ==================================
 class GMScheduler:
     def __init__(self):
         self.accounts = []
@@ -139,7 +139,7 @@ class GMScheduler:
     def load_accounts(self):
         accounts = []
         
-        # Try loading from .env file first if it exists
+        # Try loading wallet from .env
         if os.path.exists(CONFIG["ENV_FILE"]):
             try:
                 from dotenv import load_dotenv
@@ -233,7 +233,7 @@ class GMScheduler:
         try:
             # Get chain ID to determine token symbol
             chain_id = self.web3.eth.chain_id
-            token_symbol = CHAIN_SYMBOLS.get(chain_id, "ETH")  # Default to ETH if chain not found
+            token_symbol = CHAIN_SYMBOLS.get(chain_id, "ETH")
             
             balance_wei = self.web3.eth.get_balance(address)
             balance_eth = self.web3.from_wei(balance_wei, 'ether')
@@ -245,10 +245,7 @@ class GMScheduler:
 
     def estimate_gas(self, sender):
         try:
-            # Try to estimate gas from GM function
             gas_estimate = self.contract.functions.gm().estimate_gas({'from': sender})
-
-            # Buffer only 5% from initial estimate
             return int(gas_estimate * 1.05)  
         except Exception as e:
             print(f"⚠️ Gas estimation failed: {str(e)}. Using safe default.")
@@ -350,7 +347,6 @@ class GMScheduler:
                 
                 # Increase gas price on retry, but more conservatively
                 if isinstance(self.gas_price, dict):
-                    # Only increase by 10% on each retry unless fee-specific error
                     if "fee too low" not in error_message.lower() and "underpriced" not in error_message.lower():
                         self.gas_price['maxFeePerGas'] = int(self.gas_price['maxFeePerGas'] * 1.1)
                         self.gas_price['maxPriorityFeePerGas'] = int(self.gas_price['maxPriorityFeePerGas'] * 1.1)
@@ -378,17 +374,16 @@ class GMScheduler:
             private_key = account['key']
             sender = account['address']
             
-            # Get initial balance
+            # Cek bang get initial balance
             initial_balance = self.get_wallet_balance(sender)
             
-            # Build and send transaction
             tx_data = self.build_transaction(sender)
             if tx_data:
                 receipt = self.send_transaction(tx_data, private_key)
                 if receipt and receipt.status == 1:
                     time.sleep(5)
                     
-                    # Get updated balance
+                    # Cek bang get updated balance
                     chain_id = self.web3.eth.chain_id
                     token_symbol = CHAIN_SYMBOLS.get(chain_id, "ETH")
                     new_balance = self.web3.eth.get_balance(sender)
@@ -415,8 +410,7 @@ def main():
         # Initialize Web3 and contract
         web3 = Web3(Web3.HTTPProvider(CONFIG["RPC_URL"]))
         contract = web3.eth.contract(address=CONFIG["CONTRACT_ADDRESS"], abi=ABI)
-
-        # Ensure connection is successful
+        
         chain_id = is_connected(web3)
         if not chain_id:
             print("Failed to connect to the network.")
@@ -429,11 +423,11 @@ def main():
         scheduler = GMScheduler()
         scheduler.initialize()
 
-        # Execute GM every WAIT_TIME (e.g., every 5 minutes)
+        # Execute GM every WAIT_TIME
         while True:
             for account in scheduler.accounts:
-                scheduler.execute_gm(account)  # Run GM transaction
-                time.sleep(CONFIG["WAIT_TIME"])  # Wait for the configured time before next execution
+                scheduler.execute_gm(account)
+                time.sleep(CONFIG["WAIT_TIME"])
 
         print(f"{Fore.YELLOW}☑️ All gM onchain completed. Waiting for next execution bang!!!...{Fore.RESET}")
         
