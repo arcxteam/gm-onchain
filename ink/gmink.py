@@ -47,6 +47,9 @@ CHAIN_SYMBOLS = {
     690: "ETH-Redstone",
 }
 
+# Transaction counter
+tx_counter = 0
+
 # ======================== ABI Definition ========================
 ABI = [
     {
@@ -283,7 +286,7 @@ class GMScheduler:
                 'chainId': self.web3.eth.chain_id
             }
 
-            print(f"🔵 Transaction OnChain Data Prepared to Say: {Fore.GREEN}hELLO...gM with nonce {nonce}{Style.RESET_ALL}")
+            print(f"🔵 Transaction OnChain Data Prepared to Say: {Fore.GREEN}hELLO...gM with nonce --> {nonce}{Style.RESET_ALL}")
             return tx
 
         except Exception as e:
