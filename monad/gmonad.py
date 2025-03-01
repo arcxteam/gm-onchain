@@ -5,6 +5,7 @@ import os
 import time
 import datetime
 import logging
+import random
 from pathlib import Path
 from colorama import Fore, Style, init
 
@@ -25,8 +26,8 @@ CONFIG = {
     "COOLDOWN": {
         "SUCCESS": 10,
         "ERROR": 30
-    },
-    "WAIT_TIME": 300  # this seconds, can adjust anytime for default 5m
+    }
+    # Removed WAIT_TIME: 300
 }
 
 # ======================== Chain Symbol Mapping ========================
@@ -49,6 +50,11 @@ CHAIN_SYMBOLS = {
 
 # Transaction counter
 tx_counter = 0
+
+# ======================== Sleep Function ========================
+def sleep_seconds(seconds):
+    print(f"9️⃣ {Fore.GREEN}Mode airplane..Rotating sleep in {seconds} seconds...{Style.RESET_ALL}")
+    time.sleep(seconds)
 
 # ======================== ABI Contract ========================
 ABI = [
@@ -167,7 +173,7 @@ class GMScheduler:
                         for k in keys:
                             if not k.startswith('0x'):
                                 k = '0x' + k
-                            if len(k) == 66 and k.startswith('0x'):  # 0x + 64 hex chars
+                            if len(k) == 66 and k.startswith('0x'):
                                 try:
                                     account = self.web3.eth.account.from_key(k)
                                     accounts.append({
@@ -199,7 +205,7 @@ class GMScheduler:
             fee_history = self.web3.eth.fee_history(1, 'latest')
             base_fee = fee_history['baseFeePerGas'][0]
 
-            # Get max priority fee from CONFIG (can be set by user)
+            # Get max priority fee from CONFIG
             max_priority = self.web3.to_wei(CONFIG["MAX_PRIORITY_GWEI"], 'gwei')
 
             # Use multiplier from CONFIG for max fee
@@ -214,8 +220,8 @@ class GMScheduler:
             total_cost_wei = CONFIG["GAS_LIMIT"] * max_fee
             total_cost_eth = self.web3.from_wei(total_cost_wei, 'ether')
 
-            print(f"⚡ Gas Prices: Base Fee: {base_fee_gwei:.9f} Gwei | Max Fee: {max_fee_gwei:.9f} Gwei | Priority Fee: {max_priority_gwei:.9f} Gwei")
-            print(f"🤑 Est. Transaction Cost: {Fore.YELLOW}{total_cost_eth:.9f} ETH{Fore.RESET}")
+            print(f"⛽ Gas Prices: Base Fee: {base_fee_gwei:.9f} Gwei | Max Fee: {max_fee_gwei:.9f} Gwei | Priority Fee: {max_priority_gwei:.9f} Gwei")
+            print(f"💱 Est. Transaction Cost: {Fore.YELLOW}{total_cost_eth:.9f} ETH{Fore.RESET}")
 
             # Store configured gas price into object variables
             self.gas_price = {'maxFeePerGas': max_fee, 'maxPriorityFeePerGas': max_priority}
@@ -227,7 +233,7 @@ class GMScheduler:
             legacy_gas_price = int(current * CONFIG["GAS_MULTIPLIER"])
             self.gas_price = legacy_gas_price
             gas_gwei = self.web3.from_wei(legacy_gas_price, 'gwei')
-            print(f"⛽ Gas price updated: {gas_gwei:.9f} Gwei (Legacy Mode) - Exception: {str(e)}")
+            print(f"⚡ Gas price updated: {gas_gwei:.9f} Gwei (Legacy Mode) - Exception: {str(e)}")
     
     def get_wallet_balance(self, address):
         try:
@@ -249,13 +255,11 @@ class GMScheduler:
             return int(gas_estimate * 1.05)  
         except Exception as e:
             print(f"⚠️ Gas estimation failed: {str(e)}. Using safe default.")
-            return CONFIG["GAS_LIMIT"]  # Use standard limit as fallback
+            return CONFIG["GAS_LIMIT"]
     
     def build_transaction(self, sender):
         try:
             nonce = self.web3.eth.get_transaction_count(sender, 'pending')
-
-            # Use latest gas estimate
             gas_limit = self.estimate_gas(sender)
             print(f"🚀 Estimated gas usage: {gas_limit}")
 
@@ -272,7 +276,6 @@ class GMScheduler:
                 'chainId': self.web3.eth.chain_id
             }
             else:
-                # Use legacy gas price if chain does not support EIP-1559
                 tx = {
                 'from': sender,
                 'to': CONFIG["CONTRACT_ADDRESS"],
@@ -283,7 +286,7 @@ class GMScheduler:
                 'chainId': self.web3.eth.chain_id
             }
 
-            print(f"🔵 Transaction OnChain Data Prepared to Say: {Fore.GREEN}hELLO...gM with nonce --> {nonce}{Style.RESET_ALL}")
+            print(f"🔵 Transaction OnChain Data Prepared to Say: {Fore.GREEN}hELLO...GM with nonce --> {nonce}{Style.RESET_ALL}")
             return tx
 
         except Exception as e:
@@ -302,7 +305,6 @@ class GMScheduler:
                 tx_hash = receipt.hex()
                 print(f"6️⃣ Transaction Sent {Fore.GREEN}Successfully{Style.RESET_ALL} with Total TXiD {Fore.RED}{tx_counter}{Style.RESET_ALL} -> {Fore.GREEN}TxID Hash:{Style.RESET_ALL} {tx_hash}")
                 
-                # Wait for transaction receipt with timeout
                 print(f"⌛ Waiting for transaction to onchain bang....")
                 try:
                     tx_receipt = self.web3.eth.wait_for_transaction_receipt(receipt, timeout=120)
@@ -322,7 +324,6 @@ class GMScheduler:
                     print(f"{Fore.RED}Error: 💰 Insufficient funds for gas * price + value{Style.RESET_ALL}")
                     return None
                 elif "nonce too low" in error_message.lower():
-                    # Try to get the correct nonce and update transaction
                     try:
                         new_nonce = self.web3.eth.get_transaction_count(tx['from'], 'pending')
                         tx['nonce'] = new_nonce
@@ -331,7 +332,6 @@ class GMScheduler:
                         print(f"Error updating nonce: {str(nonce_error)}")
                 # Check for fee-related errors that might require a slight increase
                 elif "fee too low" in error_message.lower() or "underpriced" in error_message.lower():
-                    # Increase fees more aggressively on this specific error
                     if isinstance(self.gas_price, dict):
                         self.gas_price['maxFeePerGas'] = int(self.gas_price['maxFeePerGas'] * 1.5)
                         self.gas_price['maxPriorityFeePerGas'] = int(self.gas_price['maxPriorityFeePerGas'] * 1.5)
@@ -392,7 +392,12 @@ class GMScheduler:
                     gas_cost_eth = self.web3.from_wei(gas_used, 'ether')
                     
                     print(f"7️⃣ Checking Last Balance: {Fore.YELLOW}{new_balance_eth:.8f} {token_symbol}{Fore.RESET}")
-                    print(f"🤑 Transaction cost: {Fore.YELLOW}{gas_cost_eth:.8f} {token_symbol}{Fore.RESET}")
+                    print(f"🤑 Final Transaction Cost: {Fore.YELLOW}{gas_cost_eth:.8f} {token_symbol}{Fore.RESET}")
+                    
+                    # Add random & rotating delay
+                    delay_seconds = random.randint(360, 840)
+                    print(f"{Fore.GREEN}8️⃣ Get random rotating in {delay_seconds} seconds before next GM transaction...{Style.RESET_ALL}")
+                    sleep_seconds(delay_seconds)
                     
                     return True
                 else:
@@ -423,13 +428,12 @@ def main():
         scheduler = GMScheduler()
         scheduler.initialize()
 
-        # Execute GM every WAIT_TIME
+        # Execute GM in random delay seconds
         while True:
             for account in scheduler.accounts:
                 scheduler.execute_gm(account)
-                time.sleep(CONFIG["WAIT_TIME"])
 
-        print(f"{Fore.YELLOW}☑️ All gM onchain completed. Waiting for next execution bang!!!...{Fore.RESET}")
+            print(f"{Fore.YELLOW}☑️ All GM onchain completed..{Fore.RESET} Starting GM to next call bang...")
         
     except Exception as e:
         print(f"An error occurred: {str(e)}")
