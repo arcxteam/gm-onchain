@@ -7,8 +7,10 @@
 > [!IMPORTANT]
 > I am not responsible for any loss or damage caused by this automation. Use it at your own risk, but I'm assured that it's safe since the smart contract has been verified and it's only limited to farming tx/id on testnet or mainnet. Let's start with a simple greeting, like **Good Morning**
 ## 🦾 Script Features
-- Fecthing call gwei/gas direct to API-RPC w/ implement `EIP-1559` or `Legacy mode` for low fees-cost
+- Fallback gwei/gas direct to API-RPC to implement `EIP-1559` or `Legacy mode` for low cost/fees
 - Automated single call `gM` or `gMTo` every minutes/hours/daily
+- Automated random rotating & batch in delay `6m - 16m - 34 minutes` every swap/transactions and more
+- Automated running `24/7`
 - Support `Testnet & Mainnet`
 - Support multi account w/ `private_keys.txt`
 - Support Windows/Linux/Termux
@@ -22,7 +24,8 @@
  ┣ 📂 monad
  ┃ ┣ 📜 .env
  ┃ ┣ 📜 gmonad.py
- ┃ ┣ 📜 monswap.py
+ ┃ ┣ 📜 uniswap.py
+ ┃ ┣ 📜 x.....xxx.py
  ┃ ┣ 📜 private_keys.txt
  ┃ ┣ 📜 requirements.txt
 +┣ 📂 ink
