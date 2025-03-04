@@ -2,3 +2,6 @@ web3==6.20.4
 python-dotenv==1.0.0
 colorama==0.4.6
 eth-account
+py-solc-x
+asyncio
+requests
