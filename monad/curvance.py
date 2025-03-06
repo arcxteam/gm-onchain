@@ -12,7 +12,6 @@ colorama.init(autoreset=True)
 
 # Config RPC & ABI CA
 RPC_URLS = [
-    "https://monad-testnet.g.alchemy.com/v2/G9UmvdH6oFBXk4Z_-fbJKt8m6wrdf6Ai",
     "https://testnet-rpc.monad.xyz",
     "https://monad-testnet.drpc.org",
     "https://monad-testnet.blockvision.org/v1/2td1EBS890QoVDhdSdd0Q1OlEGw"
@@ -28,7 +27,7 @@ CONTRACT_ABI = [
          "type": "function"
      }
  ]
-GAS_LIMIT = 35001
+GAS_LIMIT = 38001
 CHAIN_ID = 10143
 
 class Logger:
@@ -171,7 +170,7 @@ class PumpBot:
         )
         
         Logger.info(f" {Fore.YELLOW} 🎮 CURVANCE PUMP 4 GAINS - MONAD TESTNET 🎮 {Fore.RESET}")
-        self.current_batch_size = random.randint(5, 13)  # random tx per-batch
+        self.current_batch_size = random.randint(6, 14)  # random tx per-batch
         Logger.info(f" 🧵 Initial batch PUMP we get {Fore.YELLOW}#{self.current_batch_size}{Fore.RESET} TXiD transactions")
         gas_type = "EIP-1559" if self.use_eip1559 else "Legacy"
         Logger.info(f" ⛽️ Using {gas_type} {Fore.RED}gas{Fore.RESET} pricing")
@@ -310,8 +309,8 @@ class PumpBot:
                     self.transaction_count = tx_num
                     if self.execute_pump():
                         successful_txs += 1
-                        # Delay tx/id in batch (45s-80s)
-                        intra_delay = random.randint(45, 80)
+                        # Delay tx/id in batch (35s-60s)
+                        intra_delay = random.randint(35, 60)
                         minutes, seconds = divmod(intra_delay, 60)
                         Logger.warning(f" 🔮 Sub-batch get random rotating in --> {Fore.CYAN} {minutes} mins {seconds} secs{Fore.RESET}")
                         time.sleep(intra_delay)
@@ -324,7 +323,7 @@ class PumpBot:
                 cycle_completed = self.switch_wallet()
                 # Update batch counter
                 self.batch_count += 1
-                self.current_batch_size = random.randint(5, 13)
+                self.current_batch_size = random.randint(6, 14)
                 
                 if cycle_completed:
                     success_rate = successful_txs / self.current_batch_size
@@ -333,14 +332,14 @@ class PumpBot:
                     if success_rate < 0.5:
                         batch_delay = random.randint(3600, 5400)  # 1-1.5 hours
                     else:
-                        batch_delay = random.randint(10800, 14400) # delay on batch (3-4 hours)
+                        batch_delay = random.randint(10880, 14440) # delay on batch (3-4 hours)
                     
                     minutes, seconds = divmod(batch_delay, 60)
                     Logger.warning(f" ✅ Main-batch has {Fore.GREEN}Completed!!{Fore.RESET} Next sub-batch random rotating in -> {Fore.GREEN} {minutes} mins {seconds} secs{Fore.RESET}")
                     Logger.gas_report(f" 💲 Total gas used so far: {Fore.YELLOW} {self.total_gas_used:.8f} MON{Fore.RESET}")
                     time.sleep(batch_delay)
                 else:
-                    short_delay = random.randint(10, 30) # delay switch wallet 10s-30s
+                    short_delay = random.randint(25, 55) # delay switch wallet 25s-55s
                     Logger.warning(f" 🔁 Moving to next wallet in {Fore.YELLOW}{short_delay}{Fore.RESET} seconds")
                     time.sleep(short_delay)
 
