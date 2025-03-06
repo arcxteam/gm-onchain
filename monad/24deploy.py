@@ -10,7 +10,7 @@ from solcx import compile_source, install_solc
 from dotenv import load_dotenv
 from datetime import datetime
 
-# specific solidity compiler version
+# solidity compiler version
 try:
     install_solc('0.8.17')
 except Exception as e:
@@ -190,7 +190,6 @@ contract Ownership {
 """
 }
 
-# Combine with the original contracts
 CONTRACTS = {}
 CONTRACTS.update(SIMPLE_CONTRACTS)
 
@@ -241,7 +240,6 @@ async def deploy_contract(w3, contract_type, contract_name, private_key):
     
     print(f"{Colors.GREEN}✅ Compilation successful{Colors.END}")
     
-    # Get transaction account
     account = w3.eth.account.from_key(private_key)
     wallet_address = account.address
     
@@ -250,7 +248,6 @@ async def deploy_contract(w3, contract_type, contract_name, private_key):
     balance_eth = w3.from_wei(balance, 'ether')
     print(f"{Colors.CYAN}💰 Current wallet balance --> {balance_eth:.6f} MON{Colors.END}")
     
-    # Get current gas price and boosting 10%
     try:
         gas_price = w3.eth.gas_price
         increased_gas_price = max(int(gas_price * 1.05), w3.to_wei(50, 'gwei'))  
@@ -265,7 +262,7 @@ async def deploy_contract(w3, contract_type, contract_name, private_key):
     # Build transaction
     nonce = w3.eth.get_transaction_count(wallet_address)
     
-    gas_limit = 150000  # Default gas
+    gas_limit = 150001
     try:
         # Try to estimate gas
         estimated_gas = w3.eth.estimate_gas({
@@ -366,7 +363,7 @@ def save_deployment_records(deployments):
 async def wait_with_progress(hours, message="Waiting"):
     """Wait for specified hours with progress updates."""
     seconds = int(hours * 3600)
-    update_interval = 1800  # progress every 30 menit 
+    update_interval = 2025  # add progress every 33m 
     
     print(f"\n{Colors.YELLOW}⏳ {message} for approximately {hours:.1f} hours...{Colors.END}")
     
@@ -420,7 +417,7 @@ def load_private_keys():
     # Try to load from private_keys.txt
     try:
         with open("private_keys.txt", "r") as file:
-            keys = [line.strip() for line in file.readlines()]
+            keys = [line.strip() for line in file.readlines() if line.strip() and not line.strip().startswith('#')]
             private_keys.extend(keys)
     except Exception as e:
         print(f"{Colors.YELLOW}Note: private_keys.txt not found or couldn't be read: {e}{Colors.END}")
@@ -428,9 +425,17 @@ def load_private_keys():
     if not private_keys:
         raise Exception("No private keys found in .env or private_keys.txt")
 
-    print(f"{Colors.CYAN}📸 Loaded {len(private_keys)} EVM wallet(s) {Colors.GREEN}successfully{Colors.END}")
+    print(f"{Colors.CYAN}📸 Loaded {len(private_keys)} EVM wallet(s) {Colors.GREEN}Successfully{Colors.END}")
     
-    return list(set(private_keys))
+    # Remove duplicates but preserve order
+    seen = set()
+    unique_keys = []
+    for key in private_keys:
+        if key not in seen:
+            seen.add(key)
+            unique_keys.append(key)
+    
+    return unique_keys
 
 def get_contract_types_for_deployment(num_contracts=3):
     """Get random contract types for deployment"""
@@ -452,11 +457,11 @@ async def main():
         print(f"{Colors.RED}❌ No private keys found. Please check your .env file or private_keys.txt{Colors.END}")
         return
     
-    # tRY connect to RPC
+    # Try connect to RPC
     RPC_URLS = [
-        "https://monad-testnet.g.alchemy.com/v2/G9UmvdH6oFBXk4Z_-fbJKt8m6wrdf6Ai",
         "https://testnet-rpc.monad.xyz",
-        "https://monad-testnet.drpc.org"
+        "https://monad-testnet.drpc.org",
+        "https://monad-testnet.blockvision.org/v1/2td1EBS890QoVDhdSdd0Q1OlEGw"
     ]
     
     w3 = None
@@ -507,10 +512,13 @@ async def main():
     print(f"{Colors.CYAN}   Chain ID: {chain_id} Monad Testnet {Colors.END}")
     print(f"{Colors.CYAN}   Connected to RPC: {w3.provider.endpoint_uri}{Colors.END}")
     
-    # Number of contracts to deploy
-    num_contracts = 3
+    # Get the total number of contracts to deploy (3 per wallet by default)
+    total_contracts_per_wallet = 3
+    total_contracts = len(valid_wallets) * total_contracts_per_wallet
     
-    print(f"{Colors.BLUE}🚀 Will deploy {num_contracts} contracts over 24h/Daily with approximately 8-hour intervals{Colors.END}")
+    # Improved message for efficient wallet rotation
+    print(f"{Colors.BLUE}🚀 Will deploy {total_contracts} contracts total ({total_contracts_per_wallet} per wallet){Colors.END}")
+    print(f"{Colors.YELLOW}📐 Strategy: Deploy contracts sequentially across all wallets first, then wait 8-hour between cycles{Colors.END}")
     print(f"{Colors.YELLOW}⏱️  Estimated completion time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} + 24 hours{Colors.END}")
     print(f"{Colors.YELLOW}📋 No user interaction will be required during the 24-hour period.{Colors.END}")
     print(f"{Colors.YELLOW}📝 Results will be saved to a JSON file when complete.{Colors.END}")
@@ -530,56 +538,57 @@ async def main():
     deployments = []
     
     # Get random contract types to deploy
-    contract_types = get_contract_types_for_deployment(num_contracts)
-    
-    # Distribute wallets evenly across deployments
-    # If wallets < contracts, some wallets will be used multiple times
-    # If wallets >= contracts, each contract gets a unique wallet
-    wallet_cycle = valid_wallets.copy()
-    random.shuffle(wallet_cycle)
-    
-    # Deploy contracts over 24 hours & cycling available wallets
-    for i, contract_type in enumerate(contract_types):
-        deployment_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    contract_types_per_wallet = {}
+    for wallet_key in valid_wallets:
+        contract_types_per_wallet[wallet_key] = get_contract_types_for_deployment(total_contracts_per_wallet)
         
-        if not wallet_cycle:
-            wallet_cycle = valid_wallets.copy()
-            random.shuffle(wallet_cycle)
+    for cycle in range(total_contracts_per_wallet):
+        cycle_start_time = datetime.now()
+        print(f"\n{Colors.GREEN}======= Starting deployment cycle {cycle+1}/{total_contracts_per_wallet} at {cycle_start_time.strftime('%Y-%m-%d %H:%M:%S')} ======={Colors.END}")
+        
+        # Deploy one contract for each wallet in this cycle
+        for wallet_idx, wallet_key in enumerate(valid_wallets):
+            wallet_account = w3.eth.account.from_key(wallet_key)
+            wallet_address = wallet_account.address
             
-        current_private_key = wallet_cycle.pop(0)
-        current_account = w3.eth.account.from_key(current_private_key)
-        current_address = current_account.address
-        
-        # Generate random name
-        contract_name = generate_random_name()
-        
-        print(f"\n{Colors.BLUE}══════════════════════════════════════════════════{Colors.END}")
-        print(f"{Colors.BOLD}🔨 Contract {i+1}/{len(contract_types)} at {deployment_time}{Colors.END}")
-        print(f"{Colors.BOLD}🔨 Using wallet: {Colors.YELLOW}{current_address[:6]}...{current_address[-4:]}{Colors.END}")
-        print(f"{Colors.BOLD}🔨 Deploying: {Colors.YELLOW}{contract_name}{Colors.END} ({Colors.CYAN}{contract_type}{Colors.END})")
-        print(f"{Colors.BLUE}══════════════════════════════════════════════════{Colors.END}\n")
-        
-        # Deploy contract
-        deployment = await deploy_contract(w3, contract_type, contract_name, current_private_key)
-        
-        if deployment:
-            deployment['wallet_address'] = current_address
-            deployments.append(deployment)
+            contract_type = contract_types_per_wallet[wallet_key][cycle]
+            contract_name = generate_random_name()
             
-            # Save current results after each successful deployment
-            save_deployment_records(deployments)
+            deployment_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             
-            # If not the last deployment, wait for ~8 hours
-            if i < len(contract_types) - 1:
-                # Add some randomness to the wait time (7-9 hours)
-                wait_hours = random.uniform(7.0, 9.0)
-                await wait_with_progress(wait_hours, f"Waiting for next deployment ({i+2}/{len(contract_types)})")
+            print(f"\n{Colors.BLUE}══════════════════════════════════════════════════{Colors.END}")
+            print(f"{Colors.BOLD}🔨 Wallet {wallet_idx+1}/{len(valid_wallets)} Deployment {cycle+1}/{total_contracts_per_wallet} at {deployment_time}{Colors.END}")
+            print(f"{Colors.BOLD}🔨 Using wallet: {Colors.YELLOW}{wallet_address[:6]}...{wallet_address[-4:]}{Colors.END}")
+            print(f"{Colors.BOLD}🔨 Deploying: {Colors.YELLOW}{contract_name}{Colors.END} ({Colors.CYAN}{contract_type}{Colors.END})")
+            print(f"{Colors.BLUE}══════════════════════════════════════════════════{Colors.END}\n")
+            
+            # Deploy contract
+            deployment = await deploy_contract(w3, contract_type, contract_name, wallet_key)
+            
+            if deployment:
+                deployment['wallet_address'] = wallet_address
+                deployments.append(deployment)
+                
+                # Save current results after each successful deployment
+                save_deployment_records(deployments)
+                
+                # Short wait between wallets within the same cycle (39-59 seconds)
+                if wallet_idx < len(valid_wallets) - 1:
+                    wait_seconds = random.randint(29, 59)
+                    print(f"{Colors.YELLOW}⏳ Short wait of {wait_seconds} seconds before next wallet deployment...{Colors.END}")
+                    await asyncio.sleep(wait_seconds)
+        
+        # But only if this is not the last cycle wait 8 hours
+        if cycle < total_contracts_per_wallet - 1:
+            # Random wait time between 7-8 hours
+            wait_hours = random.uniform(7.0, 8.0)
+            await wait_with_progress(wait_hours, f"Completed cycle {cycle+1}/{total_contracts_per_wallet}. Waiting for next cycle")
     
     if deployments:
         save_deployment_records(deployments)
     
     print(f"\n{Colors.GREEN}✅ All deployments completed successfully over 24 hours!{Colors.END}")
-    print(f"{Colors.GREEN}✅ Total contracts deployed: {len(deployments)}/{len(contract_types)}{Colors.END}")
+    print(f"{Colors.GREEN}✅ Total contracts deployed: {len(deployments)}/{total_contracts}{Colors.END}")
     print(f"{Colors.GREEN}✅ Deployment records saved to JSON file.{Colors.END}")
 
 if __name__ == "__main__":
