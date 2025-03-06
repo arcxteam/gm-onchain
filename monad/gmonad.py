@@ -394,8 +394,8 @@ class GMScheduler:
                     print(f"7️⃣ Checking Last Balance: {Fore.YELLOW}{new_balance_eth:.8f} {token_symbol}{Fore.RESET}")
                     print(f"🤑 Final Transaction Cost: {Fore.YELLOW}{gas_cost_eth:.8f} {token_symbol}{Fore.RESET}")
                     
-                    # Add random & rotating delay
-                    delay_seconds = random.randint(360, 840)
+                    # Add random & rotating delay 48m-68m
+                    delay_seconds = random.randint(2888, 3888)
                     print(f"{Fore.GREEN}8️⃣ Get random rotating in {delay_seconds} seconds before next GM transaction...{Style.RESET_ALL}")
                     sleep_seconds(delay_seconds)
                     
@@ -424,7 +424,7 @@ def main():
             chain_name = CHAIN_SYMBOLS.get(chain_id, "Unknown")
             print(f"2️⃣ Connected to the network: {Fore.YELLOW}{chain_name}{Fore.RESET}")
 
-        # Initialize scheduler
+        # Initialize scheduler rotating GM
         scheduler = GMScheduler()
         scheduler.initialize()
 
