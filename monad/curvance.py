@@ -27,7 +27,7 @@ CONTRACT_ABI = [
          "type": "function"
      }
  ]
-GAS_LIMIT = 38001
+GAS_LIMIT = 37001
 CHAIN_ID = 10143
 
 class Logger:
@@ -37,19 +37,19 @@ class Logger:
 
     @staticmethod
     def success(message):
-        print(f"[SUCCESS] {message}")
+        print(f"{Fore.GREEN}[SUCCESS]{Fore.RESET} {message}")
 
     @staticmethod
     def error(message):
-        print(f"{Fore.RED}[ERROR] {message}")
+        print(f"{Fore.RED}[ERROR]{Fore.RESET} {message}")
 
     @staticmethod
     def warning(message):
-        print(f"[PUMP4FUN] {message}")
+        print(f"{Fore.MAGENTA}[PUMP4FUN]{Fore.RESET} {message}")
         
     @staticmethod
     def gas_report(message):
-        print(f"[REPORT] {message}")
+        print(f"{Fore.YELLOW}[REPORT]{Fore.RESET} {message}")
 
 # Banner bang!!
 def print_banner():
@@ -77,7 +77,7 @@ def connect_rpc():
             try:
                 w3 = Web3(Web3.HTTPProvider(url))
                 if w3.is_connected():
-                    Logger.info(f" 📶 Yes..Connected to RPC: {Fore.RED}{url}")
+                    Logger.info(f" 📶 Yes..Connected to RPC: {Fore.MAGENTA}{url}")
                     return w3
             except Exception as e:
                 Logger.error(f"🆙 Failed to connect RPC: {url}: {str(e)}")
@@ -169,11 +169,11 @@ class PumpBot:
             abi=CONTRACT_ABI
         )
         
-        Logger.info(f" {Fore.YELLOW} 🎮 CURVANCE PUMP 4 GAINS - MONAD TESTNET 🎮 {Fore.RESET}")
-        self.current_batch_size = random.randint(6, 14)  # random tx per-batch
-        Logger.info(f" 🧵 Initial batch PUMP we get {Fore.YELLOW}#{self.current_batch_size}{Fore.RESET} TXiD transactions")
+        Logger.info(f"{Fore.YELLOW}🎮 CURVANCE PUMP 4 GAINS{Fore.RESET} - {Fore.MAGENTA}MONAD TESTNET 🎮 {Fore.RESET}")
+        self.current_batch_size = random.randint(5, 13)  # random tx per-batch
+        Logger.info(f" 🧵 Initial batch PUMP4FUN you get {Fore.YELLOW}#{self.current_batch_size}{Fore.RESET} TXiD transactions")
         gas_type = "EIP-1559" if self.use_eip1559 else "Legacy"
-        Logger.info(f" ⛽️ Using {gas_type} {Fore.RED}gas{Fore.RESET} pricing")
+        Logger.info(f" ⛽️ Using {gas_type} {Fore.MAGENTA}gas{Fore.RESET} pricing")
         Logger.info(f" 👛 Will rotate through {Fore.GREEN}{len(self.private_keys)}{Fore.RESET} wallets before random long delay")
 
     def switch_wallet(self):
@@ -183,15 +183,15 @@ class PumpBot:
         # siklus wallet
         if self.current_key_index == 0 and old_index != 0:
             self.wallet_cycle_complete = True
-            Logger.warning(f" 🔄 Completed full wallet rotation cycle! All {len(self.private_keys)} wallets used.")
+            Logger.warning(f"{Fore.MAGENTA} 🔄 Completed full wallet rotation cycle! All {len(self.private_keys)} wallets used.{Fore.RESET}")
         else:
             self.wallet_cycle_complete = False
             
-        Logger.info(f" 🔂 Switched to other EVM wallet {Fore.YELLOW}#{self.current_key_index + 1}{Fore.RESET}")
+        Logger.info(f"{Fore.MAGENTA} 🔂 Switched to other EVM wallet{Fore.RESET} {Fore.YELLOW}#{self.current_key_index + 1}{Fore.RESET}")
         
         current_address = Account.from_key(self.private_keys[self.current_key_index]).address
         truncated_address = f"{current_address[:6]}...{current_address[-4:]}"
-        Logger.info(f" 💲 Current wallet address: {Fore.YELLOW}{truncated_address}{Fore.RESET}")
+        Logger.info(f" 💲 Current wallet address: {Fore.MAGENTA}{truncated_address}{Fore.RESET}")
         
         return self.wallet_cycle_complete
 
@@ -302,15 +302,15 @@ class PumpBot:
         while True:
             try:
                 # Execution batch
-                Logger.info(f" 🔎 Here We PUMP..Batch {Fore.GREEN}#{self.batch_count}{Fore.RESET} with random rotating get count {Fore.YELLOW}#{self.current_batch_size}{Fore.RESET} TXiD transactions")
+                Logger.info(f" 🔎 Here the {Fore.MAGENTA}PUMP...{Fore.RESET}Batch {Fore.GREEN}#{self.batch_count}{Fore.RESET} with random rotating get count {Fore.YELLOW}#{self.current_batch_size}{Fore.RESET} TXiD transactions")
                 
                 successful_txs = 0
                 for tx_num in range(1, self.current_batch_size + 1):
                     self.transaction_count = tx_num
                     if self.execute_pump():
                         successful_txs += 1
-                        # Delay tx/id in batch (35s-60s)
-                        intra_delay = random.randint(35, 60)
+                        # Delay tx/id in batch (45s-69s)
+                        intra_delay = random.randint(45, 69)
                         minutes, seconds = divmod(intra_delay, 60)
                         Logger.warning(f" 🔮 Sub-batch get random rotating in --> {Fore.CYAN} {minutes} mins {seconds} secs{Fore.RESET}")
                         time.sleep(intra_delay)
@@ -321,9 +321,9 @@ class PumpBot:
                 Logger.warning(f" ✅ Batch {Fore.GREEN}#{self.batch_count}{Fore.RESET} for wallet {Fore.GREEN}#{self.current_key_index + 1}{Fore.RESET} completed with {Fore.GREEN}{successful_txs}/{self.current_batch_size} successful{Fore.RESET} TxID")
                 
                 cycle_completed = self.switch_wallet()
-                # Update batch counter
+                # Update batch counter random 5-13tx per-batch
                 self.batch_count += 1
-                self.current_batch_size = random.randint(6, 14)
+                self.current_batch_size = random.randint(5, 13)
                 
                 if cycle_completed:
                     success_rate = successful_txs / self.current_batch_size
@@ -332,14 +332,14 @@ class PumpBot:
                     if success_rate < 0.5:
                         batch_delay = random.randint(3600, 5400)  # 1-1.5 hours
                     else:
-                        batch_delay = random.randint(10880, 14440) # delay on batch (3-4 hours)
+                        batch_delay = random.randint(10800, 14400) # delay on batch (3-4 hours)
                     
                     minutes, seconds = divmod(batch_delay, 60)
                     Logger.warning(f" ✅ Main-batch has {Fore.GREEN}Completed!!{Fore.RESET} Next sub-batch random rotating in -> {Fore.GREEN} {minutes} mins {seconds} secs{Fore.RESET}")
                     Logger.gas_report(f" 💲 Total gas used so far: {Fore.YELLOW} {self.total_gas_used:.8f} MON{Fore.RESET}")
                     time.sleep(batch_delay)
                 else:
-                    short_delay = random.randint(25, 55) # delay switch wallet 25s-55s
+                    short_delay = random.randint(13, 35) # delay switch wallet 13s-35s
                     Logger.warning(f" 🔁 Moving to next wallet in {Fore.YELLOW}{short_delay}{Fore.RESET} seconds")
                     time.sleep(short_delay)
 
