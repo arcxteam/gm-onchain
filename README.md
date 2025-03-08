@@ -1,4 +1,4 @@
-# A Completed Guides Running GM-Onchain EVM-Wallet for Testnet & Mainnet Interaction
+# A Completed Guides Running GM-Vote Onchain All EVM Networks for Testnet & Mainnet Interaction
 
 ![gm-onchain-Codespaces-ominous](https://github.com/user-attachments/assets/ee335ddf-13aa-4667-8692-894ff02ad492)
 
@@ -7,15 +7,17 @@
 > [!IMPORTANT]
 > I am not responsible for any loss or damage caused by this automation. Use it at your own risk, but I'm assured that it's safe since the smart contract has been verified and it's only limited to farming tx/id on testnet or mainnet. Let's start with a simple greeting, like **Good Morning**
 ## 🦾 Script Features
-- Fallback gwei/gas direct to API-RPC to implement `EIP-1559` or `Legacy mode` for low cost/fees
-- Automated single call `gM` or `gMTo` every minutes/hours/daily
-- Automated random rotating & batch in delay `6m - 16m - 34 minutes` every swap/transactions and more
+- Fallback gwei-gas direct to API-RPC to implement `EIP-1559` or `Legacy mode` for low cost/fees
+- Automated running with natural behavior patterns `(Canceled on purpose & retry, Variable human-like, Nighty mode detect, Deviation, Cycle and more)`
+- Automated single call `gM`|`Vote`|`Swapping`|`Deploy` every minutes/hours/daily
+- Automated random `rotating` & batch `cycle` and more
 - Automated running `24/7`
+- Clean & informative any logger info
 - Support `Testnet & Mainnet`
 - Support multi account w/ `private_keys.txt`
 - Support Windows/Linux/Termux
 - Running on PM2 `(procesess management)`
-- 
+- **ALL FEATURES FUNCTIONs CHECK TO `CONFIG` or TEST RUNNING-LOGS**
 
 ## Structure of directory files
 
@@ -25,11 +27,11 @@
  ┃ ┣ 📜 .env
  ┃ ┣ 📜 gmonad.py
  ┃ ┣ 📜 uniswap.py
- ┃ ┣ 📜 x.....xxx.py
+ ┃ ┣ 📜 curvance.py
  ┃ ┣ 📜 private_keys.txt
  ┃ ┣ 📜 requirements.txt
 +┣ 📂 ink
-+┃ ┣ 📜 gmink.py
++┃ ┣ 📜 voting.py
 +┃ ┣ 📜 gmofficial.py
 +┃ ┣ 📜 ........
 -┣ 📂 ...and more
@@ -56,8 +58,6 @@
 - **Pm2** have processing manager 2 installed
 - VPS or RDP (OPTIONAL)
 
----
-
 ## Setup Installation
 
 - Install Python For Windows [Python](https://www.python.org/ftp/python/3.13.0/python-3.13.0-amd64.exe)
@@ -68,60 +68,45 @@ apt install python3 python3-pip git -y
 ```bash
 pkg install python python-pip git -y
 ```
-
-**1. Clone this repository**
+## Clone Repository
 ```bash
 git clone https://github.com/arcxteam/gm-onchain.git
 cd gm-onchain
 ```
+---
+
+### STEP TO USE
+
 ```diff
 > this example go to each directory
 - cd gm-onchain/monad
 - cd gm-onchain/soneium
 - cd gm-onchain/ink
-```
 
-**2. Install processing manager 2 (if not yet)**
-```bash
-npm install -g pm2
-```
+> Install processing manager 2 (if not yet)
+- npm install -g pm2
 
-**3. Input your private keys wallet address chosee one `.env` or `private_keys.txt`**
-```bash
-nano private_keys.txt
-```
-```bash
-nano .env
-```
+> Input your private keys wallet address chosee one (.env) or (private_keys.txt)
+- nano private_keys.txt
+- nano .env
 
-**4. Install depedency modul (1) Windows/Termux and (2) Linux**
-```bash
-pip install -r requirements.txt
-```
-```bash
-pip3 install -r requirements.txt
-```
+> Install depedency modul (1) Windows/Termux and (2) Linux
+- pip install -r requirements.txt
+- pip3 install -r requirements.txt
 
-**5. Run at first time**
-```bash
-python3 gmonad.py
-```
-```bash
-python3 gmink.py
-```
-- This example for runnig `py` and go to each folders
-- So, close the logs with command `CTRL+C`
+> Run at first time
+- python3 curvance.py
+- python3 voting.py
++ This example for runnig name `py` and go to each folders
++ So, close the logs with command `CTRL+C`
 
-**6.  Run at second time with PM2**
-```bash
-pm2 start gmonad.py --name gm-monad
+> Run at second time with PM2 background
+- pm2 start curvance.py --name monad-pump
+- pm2 start voting.py --name monad-vote
+- pm2 start voting.py --name ink-vote
 ```
-```bash
-pm2 start gmnexus.py --name gm-ink
-```
----
 
 ## Example Usefull Command Logs
-- Status logs `pm2 logs gm-monad`
-- Status stop/delete `pm2 stop gm-monad` `pm2 delete gm-monad`
+- Status logs `pm2 logs monad-pump`
+- Status stop/delete `pm2 stop monad-pump` `pm2 delete monad-pump`
 - Status monitor `pm2 status` `pm2 monit` `pm2 list`
