@@ -104,6 +104,9 @@ cd gm-onchain
 - pm2 start curvance.py --name monad-pump
 - pm2 start voting.py --name monad-vote
 - pm2 start voting.py --name ink-vote
+
+> Note; in folder like gm-onchain/monad id you can run to all
+- pm2 start ecosystem.config.js
 ```
 
 ## Example Usefull Command Logs
