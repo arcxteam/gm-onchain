@@ -6,7 +6,7 @@ module.exports = {
       interpreter: "python3",
       autorestart: true,
       watch: false, // or true if the main-file was edit
-      max_memory_restart: "100M",
+      max_memory_restart: "120M",
       log_date_format: "YYYY-MM-DD HH:mm:ss Z",
       error_file: "logs/deploy-error.log",
       out_file: "logs/deploy-out.log",
@@ -14,7 +14,7 @@ module.exports = {
       max_size: "10M",
       rotate_logs: true,
       env: {
-        NODE_ENV: "production"
+        PYTHON_ENV: "production" // if use js NODE_ENV
       }
     },
     {
@@ -23,7 +23,7 @@ module.exports = {
       interpreter: "python3",
       autorestart: true,
       watch: false,
-      max_memory_restart: "100M",
+      max_memory_restart: "120M",
       log_date_format: "YYYY-MM-DD HH:mm:ss Z",
       error_file: "logs/gm-error.log",
       out_file: "logs/gm-out.log",
@@ -31,7 +31,7 @@ module.exports = {
       max_size: "10M",
       rotate_logs: true,
       env: {
-        NODE_ENV: "production"
+        PYTHON_ENV: "production"
       }
     },
     {
@@ -40,7 +40,7 @@ module.exports = {
       interpreter: "python3",
       autorestart: true,
       watch: false,
-      max_memory_restart: "100M",
+      max_memory_restart: "120M",
       log_date_format: "YYYY-MM-DD HH:mm:ss Z",
       error_file: "logs/pump-error.log",
       out_file: "logs/pump-out.log",
@@ -48,7 +48,7 @@ module.exports = {
       max_size: "10M",
       rotate_logs: true,
       env: {
-        NODE_ENV: "production"
+        PYTHON_ENV: "production"
       }
     },
     {
@@ -57,7 +57,7 @@ module.exports = {
       interpreter: "python3",
       autorestart: true,
       watch: false,
-      max_memory_restart: "100M",
+      max_memory_restart: "120M",
       log_date_format: "YYYY-MM-DD HH:mm:ss Z",
       error_file: "logs/uniswap-error.log",
       out_file: "logs/uniswap-out.log",
@@ -65,7 +65,7 @@ module.exports = {
       max_size: "10M",
       rotate_logs: true,
       env: {
-        NODE_ENV: "production"
+        PYTHON_ENV: "production"
       }
     },
     {
@@ -74,7 +74,7 @@ module.exports = {
       interpreter: "python3",
       autorestart: true,
       watch: false,
-      max_memory_restart: "100M",
+      max_memory_restart: "120M",
       log_date_format: "YYYY-MM-DD HH:mm:ss Z",
       error_file: "logs/voting-error.log",
       out_file: "logs/voting-out.log",
@@ -82,7 +82,7 @@ module.exports = {
       max_size: "10M",
       rotate_logs: true,
       env: {
-        NODE_ENV: "production"
+        PYTHON_ENV: "production"
       }
     },
     {
@@ -91,7 +91,7 @@ module.exports = {
       interpreter: "python3",
       autorestart: true,
       watch: false,
-      max_memory_restart: "100M",
+      max_memory_restart: "120M",
       log_date_format: "YYYY-MM-DD HH:mm:ss Z",
       error_file: "logs/wallet-error.log",
       out_file: "logs/wallet-out.log",
@@ -99,7 +99,7 @@ module.exports = {
       max_size: "10M",
       rotate_logs: true,
       env: {
-        NODE_ENV: "production"
+        PYTHON_ENV: "production"
       }
     }
   ]
