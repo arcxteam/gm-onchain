@@ -10,7 +10,7 @@ from colorama import Fore, Style
 
 colorama.init(autoreset=True)
 
-# Config RPC & ABI CA
+# Config RPC & ABI
 RPC_URLS = [
     "https://testnet-rpc.monad.xyz",
     "https://monad-testnet.drpc.org",
@@ -27,7 +27,7 @@ CONTRACT_ABI = [
          "type": "function"
      }
  ]
-GAS_LIMIT = 37001
+GAS_LIMIT = 40004
 CHAIN_ID = 10143
 
 class Logger:
@@ -309,8 +309,8 @@ class PumpBot:
                     self.transaction_count = tx_num
                     if self.execute_pump():
                         successful_txs += 1
-                        # Delay tx/id in batch (45s-69s)
-                        intra_delay = random.randint(45, 69)
+                        # Delay tx/id in batch (41s-69s)
+                        intra_delay = random.randint(41, 69)
                         minutes, seconds = divmod(intra_delay, 60)
                         Logger.warning(f" 🔮 Sub-batch get random rotating in --> {Fore.CYAN} {minutes} mins {seconds} secs{Fore.RESET}")
                         time.sleep(intra_delay)
@@ -321,9 +321,9 @@ class PumpBot:
                 Logger.warning(f" ✅ Batch {Fore.GREEN}#{self.batch_count}{Fore.RESET} for wallet {Fore.GREEN}#{self.current_key_index + 1}{Fore.RESET} completed with {Fore.GREEN}{successful_txs}/{self.current_batch_size} successful{Fore.RESET} TxID")
                 
                 cycle_completed = self.switch_wallet()
-                # Update batch counter random 5-13tx per-batch
+                # Update batch counter random 6-14tx per-batch
                 self.batch_count += 1
-                self.current_batch_size = random.randint(5, 13)
+                self.current_batch_size = random.randint(6, 14)
                 
                 if cycle_completed:
                     success_rate = successful_txs / self.current_batch_size
@@ -332,7 +332,7 @@ class PumpBot:
                     if success_rate < 0.5:
                         batch_delay = random.randint(3600, 5400)  # 1-1.5 hours
                     else:
-                        batch_delay = random.randint(10800, 14400) # delay on batch (3-4 hours)
+                        batch_delay = random.randint(10888, 14444) # delay on batch (3-4 hours)
                     
                     minutes, seconds = divmod(batch_delay, 60)
                     Logger.warning(f" ✅ Main-batch has {Fore.GREEN}Completed!!{Fore.RESET} Next sub-batch random rotating in -> {Fore.GREEN} {minutes} mins {seconds} secs{Fore.RESET}")
