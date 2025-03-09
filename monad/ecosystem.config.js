@@ -5,7 +5,7 @@ module.exports = {
       script: "24deploy.py",
       interpreter: "python3",
       autorestart: true,
-      watch: false,
+      watch: false, // or true if the main-file was edit
       max_memory_restart: "100M",
       log_date_format: "YYYY-MM-DD HH:mm:ss Z",
       error_file: "logs/deploy-error.log",
