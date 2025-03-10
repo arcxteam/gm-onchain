@@ -16,7 +16,7 @@ init(autoreset=True)
 # ======================== Configuration Module ========================
 CONFIG = {
     # Connection
-    "RPC_URL": "https://monad-testnet.g.alchemy.com/v2/G9UmvdH6oFBXk4Z_-fbJKt8m6wrdf6Ai",
+    "RPC_URL": "https://testnet-rpc.monad.xyz",
     "CONTRACT_ADDRESS": "0x0aaa9532B950392f86D2e3871068C23ef34D6774",
     "PRIVATE_KEY_FILE": os.path.join(os.path.dirname(__file__), 'private_keys.txt'),
     "ENV_FILE": ".env",
@@ -487,7 +487,7 @@ class VoteScheduler:
                 receipt = self.web3.eth.send_raw_transaction(signed.rawTransaction)
                 tx_counter += 1
                 tx_hash = receipt.hex()
-                print(f"6️⃣ Transaction Sent {Fore.GREEN}Successfully{Style.RESET_ALL} with Total TXiD {Fore.YELLOW}[ {tx_counter} ]{Style.RESET_ALL} -> {Fore.MAGENTA}TxID Hash:{Style.RESET_ALL} {tx_hash}")
+                print(f"6️⃣ Transaction sent {Fore.GREEN}Successfully{Style.RESET_ALL} with total TXiD {Fore.YELLOW}[{tx_counter}]{Style.RESET_ALL} -> {Fore.MAGENTA}TxID Hash:{Style.RESET_ALL} {tx_hash}")
                 
                 print(f"⌛ Waiting for transaction to onchain bang....")
                 try:
@@ -579,7 +579,7 @@ class VoteScheduler:
                 if is_night_time():
                     print(f"{Fore.MAGENTA}🌙 Night time detected (UTC). Applying longer delay.{Style.RESET_ALL}")
                 
-                print(f"{Fore.GREEN}8️⃣ All wallets used! {Fore.MAGENTA}cycle #{self.cycle_count}{Fore.RESET} completed. Taking a break for {Fore.MAGENTA}[{delay_minutes} minutes]{Fore.RESET} before next cycle...{Style.RESET_ALL}")
+                print(f"8️⃣ All wallets used! {Fore.MAGENTA}cycle #{self.cycle_count}{Fore.RESET} completed. Taking a break for {Fore.MAGENTA}[{delay_minutes} minutes]{Fore.RESET} before next cycle...{Style.RESET_ALL}")
                 sleep_seconds(delay_seconds, f"Waiting for {Fore.MAGENTA}cycle #{self.cycle_count + 1}{Fore.RESET}")
                 self.cycle_count += 1
             else:
@@ -604,7 +604,7 @@ class VoteScheduler:
 
     def execute_cycle(self):
         """Execute one Voting transaction for each wallet in a cycle"""
-        print(f"🔄 Starting voting transaction cycle {Fore.YELLOW}[#{self.cycle_count}]{Fore.RESET} with {Fore.YELLOW}{len(self.accounts)} wallets{Fore.RESET}")
+        print(f"🔄 Starting voting transaction {Fore.MAGENTA}cycle #{self.cycle_count}{Fore.RESET} with {Fore.YELLOW}{len(self.accounts)} wallets{Fore.RESET}")
         
         # Check if it's night time
         if is_night_time():
