@@ -4,6 +4,7 @@ import json
 import os
 import time
 import datetime
+import pytz
 import logging
 import random
 from pathlib import Path
@@ -15,7 +16,6 @@ init(autoreset=True)
 
 # ======================== Configuration Module ========================
 CONFIG = {
-    # Connection
     "RPC_URL": "https://testnet-rpc.monad.xyz",
     "CONTRACT_ADDRESS": "0x0aaa9532B950392f86D2e3871068C23ef34D6774",
     "PRIVATE_KEY_FILE": os.path.join(os.path.dirname(__file__), 'private_keys.txt'),
@@ -25,8 +25,8 @@ CONFIG = {
     # Gas settings
     "GAS_MULTIPLIER": 1.05,
     "MAX_PRIORITY_GWEI": 0.002,
-    "GAS_LIMIT": 29006,
-    "GAS_VARIATION_RANGE": (0.95, 1.15),  # Random gas multiplier ±15%
+    "GAS_LIMIT": 29000,
+    "GAS_VARIATION_RANGE": (0.90, 1.05),  # Random gas multiplier
     
     # Cooldown for errors and success
     "COOLDOWN": {
@@ -41,7 +41,7 @@ CONFIG = {
     "WALLET_SWITCH_DELAY_MAX": 248,     # Maximum delay between wallets
     
     # Cycle complete delays
-    "CYCLE_COMPLETE_DELAY_MEAN": 2100,  # Mean in seconds (35 minutes)
+    "CYCLE_COMPLETE_DELAY_MEAN": 2000,  # Mean in seconds (35 minutes)
     "CYCLE_COMPLETE_DELAY_STD": 600,    # Standard deviation (10 minutes)
     "CYCLE_COMPLETE_DELAY_MIN": 1200,   # Minimum cycle delay (20 minutes)
     "CYCLE_COMPLETE_DELAY_MAX": 3600,   # Maximum cycle delay (60 minutes)
@@ -52,8 +52,8 @@ CONFIG = {
     "NIGHT_TIME_DELAY_FACTOR": 2.0,
     
     # Wallet behavior
-    "SKIP_WALLET_PROBABILITY": 0.08,    # 8% chance to skip a wallet in a cycle
-    "FAST_TX_PROBABILITY": 0.11         # 11% chance of a "rushed" transaction
+    "SKIP_WALLET_PROBABILITY": 0.04,    # 4% chance to skip a wallet in a cycle
+    "FAST_TX_PROBABILITY": 0.08         # 8% chance of a "rushed" transaction
 }
 
 # ======================== Chain Symbol Mapping ========================
@@ -136,7 +136,8 @@ def human_delay(mean, std_dev, min_val, max_val):
     
 def is_night_time():
     """Check if current time is within the defined night hours (UTC)"""
-    current_hour = datetime.datetime.now(datetime.UTC).hour
+    utc_timezone = pytz.utc
+    current_hour = datetime.datetime.now(utc_timezone).hour
     return CONFIG["NIGHT_TIME_START_HOUR"] <= current_hour < CONFIG["NIGHT_TIME_END_HOUR"]
 
 def apply_night_time_factor(delay_seconds):
@@ -166,12 +167,12 @@ def sleep_seconds(seconds, message=None):
             if minutes_remaining > 0 and minutes_remaining % 15 == 0:  # Update every 15 minutes
                 print(f"⏳ {Fore.YELLOW}Waiting... Approximately {minutes_remaining} minutes remaining{Style.RESET_ALL}")
             
-            time.sleep(min(30, remaining))  # Sleep in smaller chunks
+            time.sleep(min(30, remaining))
     else:
         # For shorter delays, just sleep
         time.sleep(seconds)
 
-# Print welcome banner
+# Print bang banner
 def print_welcome_message():
     welcome_banner = f"""
 {Fore.GREEN}========================= WELCOME TO VOTING DAPPs ======================={Fore.RESET}
@@ -212,7 +213,7 @@ class VoteScheduler:
     def build_transaction(self, sender):
         try:
             # Add small random delay to simulate human thinking
-            time.sleep(random.uniform(0.8, 5.5))
+            time.sleep(random.uniform(0.8, 6.5))
             
             nonce = self.web3.eth.get_transaction_count(sender, 'pending')
             gas_limit = self.estimate_gas(sender)
@@ -378,7 +379,7 @@ class VoteScheduler:
             return gas_price
         except Exception as e:
             log_error(f"Legacy gas estimation failed: {str(e)}")
-            return self.web3.to_wei(50, 'gwei')  # Safe fallback
+            return self.web3.to_wei(50, 'gwei')
     
     def update_gas_price(self, is_rushed=False):
         """Update gas price with EIP-1559 or legacy mode"""
@@ -408,12 +409,12 @@ class VoteScheduler:
         try:
             gas_estimate = self.contract.functions.Vote().estimate_gas({'from': sender})
             # Apply slight random variation to gas limit (±5%)
-            variation = random.uniform(0.95, 1.05)
+            variation = random.uniform(0.90, 1.05)
             return int(gas_estimate * variation)
         except Exception as e:
             print(f"⚠️ Gas estimation failed: {str(e)}. Using safe default.")
             # Apply slight random variation to default gas limit (±5%)
-            variation = random.uniform(0.95, 1.05)
+            variation = random.uniform(0.90, 1.05)
             return int(CONFIG["GAS_LIMIT"] * variation)
             
     def handle_tx_error(self, error, tx):
