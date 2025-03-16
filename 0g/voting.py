@@ -25,9 +25,9 @@ CONFIG = {
     ),
     "PRIVATE_KEY_FILE": os.path.join(os.path.dirname(__file__), "private_keys.txt"),
     "ENV_FILE": ".env",
-    "MAX_RETRIES": 3,
+    "MAX_RETRIES": 5,
     "GAS_MULTIPLIER": 1.5,
-    "MAX_PRIORITY_GWEI": 1.8,
+    "MAX_PRIORITY_GWEI": 2.5,
     "GAS_LIMIT": 310000,
     "COOLDOWN": {"SUCCESS": 15, "ERROR": 30},
     # Short delay in wallet secs
@@ -133,11 +133,11 @@ def is_connected(web3):
     try:
         chain_id = web3.eth.chain_id
         print(
-            f"1️⃣ Connected to network with chain ID: {Fore.GREEN}{chain_id}{Fore.RESET}"
+            f"1️⃣  Connected to network with chain ID: {Fore.MAGENTA}{chain_id}{Fore.RESET}"
         )
         return chain_id
     except Exception as e:
-        print(f"0️⃣ Failed to connect to the network: {e}")
+        print(f"0️⃣  Failed to connect to the network: {e}")
         return None
 
 
@@ -168,7 +168,7 @@ class VoteScheduler:
                         address=CONFIG["CONTRACT_ADDRESS"], abi=ABI
                     )
                     print(
-                        f"🌐 Connected to RPC: {Fore.GREEN}{rpc_url}{Style.RESET_ALL}"
+                        f"🌐 Already connected to RPC: {Fore.MAGENTA}{rpc_url}{Style.RESET_ALL}"
                     )
                     return True
             except Exception as e:
@@ -203,7 +203,7 @@ class VoteScheduler:
                     self.contract = self.web3.eth.contract(
                         address=CONFIG["CONTRACT_ADDRESS"], abi=ABI
                     )
-                    print(f"🔄 Switched to RPC: {Fore.GREEN}{rpc_url}{Style.RESET_ALL}")
+                    print(f"🔄 Switched to other RPC: {Fore.MAGENTA}{rpc_url}{Style.RESET_ALL}")
                     return True
             except Exception as e:
                 print(f"⚠️ Failed to switch to RPC {rpc_url}: {e}")
@@ -268,7 +268,7 @@ class VoteScheduler:
                                     {"key": valid_key, "address": account.address}
                                 )
                                 print(
-                                    f"3️⃣ Attempting to load wallet... {Fore.GREEN}Status: OK Gas!!!{Style.RESET_ALL}"
+                                    f"3️⃣ Attempting to load wallet... {Fore.GREEN}Status: OK gas Bang!!!{Style.RESET_ALL}"
                                 )
                                 print(
                                     f"4️⃣ Wallet loaded successfully -> EVM Address: {account.address}"
@@ -286,7 +286,7 @@ class VoteScheduler:
             exit(1)
 
         self.accounts = accounts
-        print(f"🔄 Successfully loaded {len(self.accounts)} accounts")
+        print(f"🔄 Successfully loaded {Fore.GREEN}{len(self.accounts)} accounts{Fore.RESET}")
 
     def get_eip1559_gas_params(self):
         """Get EIP-1559 gas parameters"""
@@ -299,7 +299,7 @@ class VoteScheduler:
             
             base_fee = fee_history['baseFeePerGas'][0]
             if base_fee is None:
-                logger.warning("EIP-1559 base fee is None, falling back to legacy")
+                logger.warning("EIP-1559 is None or not yet support, falling back to legacy gas")
                 return None
 
             max_priority = self.web3.to_wei(CONFIG["MAX_PRIORITY_GWEI"], 'gwei')
@@ -328,7 +328,7 @@ class VoteScheduler:
             current = self.web3.eth.gas_price
             gas_price = int(current * CONFIG["GAS_MULTIPLIER"])
             gas_gwei = self.web3.from_wei(gas_price, "gwei")
-            print(f"⚡ Gas price updated: {gas_gwei:.9f} Gwei (Legacy Mode)")
+            print(f"⚡ Gas price updated: {Fore.MAGENTA}{gas_gwei:.9f} Gwei{Fore.RESET} (Legacy Mode)")
             return gas_price
         except Exception as e:
             log_error(f"Legacy gas estimation failed: {str(e)}")
@@ -352,7 +352,7 @@ class VoteScheduler:
             balance_wei = self.web3.eth.get_balance(address)
             balance_eth = self.web3.from_wei(balance_wei, "ether")
             print(
-                f"5️⃣ Checking Wallet Balance: {Fore.YELLOW}{balance_eth:.6f} {token_symbol}{Fore.RESET}"
+                f"5️⃣ Checking wallet balance: {Fore.YELLOW}{balance_eth:.6f} {token_symbol}{Fore.RESET}"
             )
             return balance_wei
         except Exception as e:
@@ -362,7 +362,7 @@ class VoteScheduler:
     def estimate_gas(self, sender):
         try:
             gas_estimate = self.contract.functions.Vote().estimate_gas({"from": sender})
-            return int(gas_estimate * 1.2)  # Add 20% buffer
+            return int(gas_estimate * 1.3)  # Add 20% buffer
         except Exception as e:
             print(f"⚠️ Gas estimation failed: {str(e)}. Using safe default.")
             return CONFIG["GAS_LIMIT"]
@@ -371,7 +371,7 @@ class VoteScheduler:
         try:
             nonce = self.web3.eth.get_transaction_count(sender, "pending")
             gas_limit = self.estimate_gas(sender)
-            print(f"🚀 Estimated gas usage: {gas_limit}")
+            print(f"🚀 Estimated gas usage: {Fore.MAGENTA}{gas_limit}{Fore.RESET}")
 
             # Vote 80% and VoteWithMessage 20% (0.8 & 0.2)
             vote_type = "Vote" if random.random() < 0.8 else "VoteWithMessage"
@@ -386,14 +386,14 @@ class VoteScheduler:
 
             if vote_type == "Vote":
                 tx["data"] = self.contract.encodeABI(fn_name="Vote", args=[])
-                print(f"🔵 Vote Transaction Prepared")
+                print(f"🔵 Vote dApps transaction prepared")
             else:
-                messages = ["0G AI layer 1", "Vote 0G", "Vote NFT", "0Gmorning", "VoteDapps"]
+                messages = ["0G AI layer 1", "Vote Eco", "0G Gravity", "0Gmorning", "VoteDapps", ""]
                 message = random.choice(messages)
                 tx["data"] = self.contract.encodeABI(
                     fn_name="VoteWithMessage", args=[message]
                 )
-                print(f"🔵 VoteWithMessage Transaction Prepared: '{message}'")
+                print(f"🔵 Vote With random Message (string code) transaction prepared: '{message}'")
 
             if isinstance(self.gas_price, dict):
                 tx["maxFeePerGas"] = self.gas_price["maxFeePerGas"]
@@ -402,7 +402,7 @@ class VoteScheduler:
                 tx["gasPrice"] = self.gas_price
 
             print(
-                f"🔵 Transaction onchain data with nonce -> {Fore.Yellow}[{nonce}]{Style.RESET_ALL}"
+                f"🔵 Transaction onchain data with nonce -> {Fore.YELLOW}[{nonce}]{Style.RESET_ALL}"
             )
             return tx
 
@@ -435,10 +435,10 @@ class VoteScheduler:
         ):
             if isinstance(self.gas_price, dict):
                 self.gas_price["maxFeePerGas"] = int(
-                    self.gas_price["maxFeePerGas"] * 1.5
+                    self.gas_price["maxFeePerGas"] * 1.8
                 )
                 self.gas_price["maxPriorityFeePerGas"] = int(
-                    self.gas_price["maxPriorityFeePerGas"] * 1.5
+                    self.gas_price["maxPriorityFeePerGas"] * 1.8
                 )
 
                 tx["maxFeePerGas"] = self.gas_price["maxFeePerGas"]
@@ -463,7 +463,7 @@ class VoteScheduler:
         # Mempool full error
         elif "mempool is full" in error_message.lower():
             print(
-                f"{Fore.YELLOW}⚠️ Mempool is full. Trying to switch RPC...{Style.RESET_ALL}"
+                f"{Fore.RED}⚠️ Mempool is full. Trying to switch RPC...{Style.RESET_ALL}"
             )
             if self.retry_with_new_rpc():
                 return tx, True
@@ -487,10 +487,10 @@ class VoteScheduler:
         else:
             if isinstance(self.gas_price, dict):
                 self.gas_price["maxFeePerGas"] = int(
-                    self.gas_price["maxFeePerGas"] * 1.2
+                    self.gas_price["maxFeePerGas"] * 1.5
                 )
                 self.gas_price["maxPriorityFeePerGas"] = int(
-                    self.gas_price["maxPriorityFeePerGas"] * 1.2
+                    self.gas_price["maxPriorityFeePerGas"] * 1.5
                 )
 
                 tx["maxFeePerGas"] = self.gas_price["maxFeePerGas"]
@@ -499,12 +499,12 @@ class VoteScheduler:
                 new_max_fee_gwei = self.web3.from_wei(
                     self.gas_price["maxFeePerGas"], "gwei"
                 )
-                print(f"Increased gas price for retry: {new_max_fee_gwei:.6f} Gwei")
+                print(f"🥶 Increased gas price for retry: {new_max_fee_gwei:.6f} Gwei")
             else:
-                self.gas_price = int(self.gas_price * 1.2)
+                self.gas_price = int(self.gas_price * 1.8)
                 tx["gasPrice"] = self.gas_price
                 new_gas_gwei = self.web3.from_wei(self.gas_price, "gwei")
-                print(f"Increased gas price for retry: {new_gas_gwei:.6f} Gwei")
+                print(f"🥶 Increased gas price for retry: {new_gas_gwei:.6f} Gwei")
 
             return tx, True
 
@@ -519,13 +519,13 @@ class VoteScheduler:
                 tx_counter += 1
                 tx_hash = receipt.hex()
                 print(
-                    f"6️⃣ Transaction Sent {Fore.GREEN}Successfully{Style.RESET_ALL} with Total TXiD {Fore.RED}{tx_counter}{Style.RESET_ALL} -> {Fore.GREEN}TxID Hash:{Style.RESET_ALL} {tx_hash}"
+                    f"6️⃣ Transaction sent {Fore.GREEN}Successfully{Style.RESET_ALL} with total TXiD {Fore.YELLOW}[{tx_counter}]{Style.RESET_ALL} -> {Fore.GREEN}TxID Hash:{Style.RESET_ALL} {tx_hash}"
                 )
 
                 print(f"⌛ Waiting for transaction to onchain...")
                 try:
                     tx_receipt = self.web3.eth.wait_for_transaction_receipt(
-                        receipt, timeout=130
+                        receipt, timeout=180
                     )
                     if tx_receipt.status == 1:
                         print(
@@ -540,7 +540,7 @@ class VoteScheduler:
                     print(
                         f"⏱️ Timeout waiting for transaction receipt: {str(timeout_error)}"
                     )
-                    print(f"🆙 Transaction may still be pending. Check hash: {tx_hash}")
+                    print(f"🆙 Transaction may still be pending. {Fore.GREEN}Check HashID{Fore.RESET}: {tx_hash}")
                     return None
 
             except Exception as e:
@@ -556,7 +556,7 @@ class VoteScheduler:
                 )
 
                 if retries == 0:
-                    print(f"{Fore.RED}All retry attempts failed.{Style.RESET_ALL}")
+                    print(f"{Fore.RED}🔄 All retry attempts failed.{Style.RESET_ALL}")
                     return None
 
                 time.sleep(CONFIG["COOLDOWN"]["ERROR"])
@@ -596,10 +596,10 @@ class VoteScheduler:
             gas_cost_eth = self.web3.from_wei(gas_used, "ether")
 
             print(
-                f"7️⃣ Checking Last Balance: {Fore.YELLOW}{new_balance_eth:.8f} {token_symbol}{Fore.RESET}"
+                f"7️⃣  Checking last balance: {Fore.YELLOW}{new_balance_eth:.8f} {token_symbol}{Fore.RESET}"
             )
             print(
-                f"🤑 Final Transaction Cost: {Fore.YELLOW}{gas_cost_eth:.8f} {token_symbol}{Fore.RESET}"
+                f"🤑 Final transaction cost: {Fore.YELLOW}{gas_cost_eth:.8f} {token_symbol}{Fore.RESET}"
             )
 
             if is_last_wallet:
@@ -608,7 +608,7 @@ class VoteScheduler:
                     CONFIG["CYCLE_COMPLETE_DELAY"][0], CONFIG["CYCLE_COMPLETE_DELAY"][1]
                 )
                 print(
-                    f"{Fore.GREEN}8️⃣ All wallets used! Cycle {self.cycle_count} completed. Long delay for {delay_seconds} seconds before next cycle...{Style.RESET_ALL}"
+                    f"{Fore.MAGENTA}8️⃣  All wallets used! cycle {self.cycle_count} was completed. Rotate long delay in {delay_seconds} seconds for next cycle{Style.RESET_ALL}"
                 )
                 sleep_seconds(delay_seconds, "Waiting for next cycle")
                 self.cycle_count += 1
@@ -630,7 +630,7 @@ class VoteScheduler:
     def execute_cycle(self):
         """Execute one Vote transaction for each wallet in a cycle"""
         print(
-            f"{Fore.CYAN}🔄 Starting Vote transaction cycle #{self.cycle_count} with {len(self.accounts)} wallets{Fore.RESET}"
+            f"🔄 Starting vote transaction {Fore.YELLOW}CYCLE #{self.cycle_count}{Fore.RESET} with {Fore.GREEN}{len(self.accounts)} wallets{Fore.RESET}"
         )
 
         self.update_gas_price()
@@ -641,17 +641,17 @@ class VoteScheduler:
 
             address_short = short_address(account["address"])
             print(
-                f"{Fore.YELLOW}🏦 Using wallet {wallet_num}/{len(self.accounts)}: {address_short}{Fore.RESET}"
+                f"🏦 Using wallet {Fore.YELLOW}[{wallet_num}/{len(self.accounts)}]{Fore.RESET} -> {Fore.GREEN}{address_short}{Fore.RESET}"
             )
 
             success = self.execute_vote(account, is_last_wallet)
             if not success:
                 print(
-                    f"{Fore.RED}Failed to execute Vote for wallet {wallet_num}. Continuing to next wallet.{Fore.RESET}"
+                    f"🥵 Failed to execute vote for wallet {Fore.YELLOW}[{wallet_num}]{Fore.RESET} Continuing to next wallet."
                 )
 
         print(
-            f"{Fore.YELLOW}☑️ Vote cycle #{self.cycle_count} completed for all wallets.{Fore.RESET}"
+            f"☑️ Vote cycle {Fore.YELLOW}#{self.cycle_count}{Fore.RESET} completed for all wallets."
         )
         return True
 
@@ -667,7 +667,7 @@ def main():
         chain_id = is_connected(scheduler.web3)
         if chain_id:
             chain_name = CHAIN_SYMBOLS.get(chain_id, "Unknown")
-            print(f"2️⃣ Connected to the network: {Fore.YELLOW}{chain_name}{Fore.RESET}")
+            print(f"2️⃣ Connected to the network: {Fore.MAGENTA}{chain_name}{Fore.RESET}")
 
         try:
             while True:
