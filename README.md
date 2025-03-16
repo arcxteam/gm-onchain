@@ -34,7 +34,7 @@
 +┃ ┣ 📜 voting.py
 +┃ ┣ 📜 gmofficial.py
 +┃ ┣ 📜 ........
--┣ 📂 ...and more
+-┣ 📂 ...0g and more
 ```
 ## Another list surge the on-chain footprint 
 
@@ -94,7 +94,7 @@ cd gm-onchain
 - pip install -r requirements.txt
 - pip3 install -r requirements.txt
 
-> Run at first time
+> Run at first time or not
 - python3 curvance.py
 - python3 voting.py
 + This example for runnig name `py` and go to each folders
@@ -104,8 +104,9 @@ cd gm-onchain
 - pm2 start curvance.py --name monad-pump
 - pm2 start voting.py --name monad-vote
 - pm2 start voting.py --name ink-vote
+- pm2 start voting.py --name og-vote
 
-> Note; in folder like gm-onchain/monad id you can run to all
+> Note; in folder like gm-onchain/monad you can run to all or not
 - pm2 start ecosystem.config.js
 ```
 
