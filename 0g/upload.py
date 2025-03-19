@@ -20,7 +20,7 @@ init(autoreset=True)
 load_dotenv()
 
 LOG_FILE = "og_uploader.log"
-MAX_LOG_SIZE = 5 * 1024 * 1024  # 5 MB
+MAX_LOG_SIZE = 4 * 1024 * 1024  # 4 MB
 MAX_LOG_FILES = 3
 
 # Setup logging
@@ -38,7 +38,6 @@ def rotate_logs():
     """Rotate log files to prevent excessive disk usage"""
     try:
         if os.path.exists(LOG_FILE) and os.path.getsize(LOG_FILE) > MAX_LOG_SIZE:
-            # Rotate logs
             for i in range(MAX_LOG_FILES - 1, 0, -1):
                 src = f"{LOG_FILE}.{i}" if i > 0 else LOG_FILE
                 dst = f"{LOG_FILE}.{i+1}"
@@ -47,13 +46,12 @@ def rotate_logs():
                         os.remove(dst)
                     shutil.move(src, dst)
             
-            # Create a new empty log file
             open(LOG_FILE, 'w').close()
             logger.info("Log file rotated")
     except Exception as e:
         print(f"Error rotating logs: {e}")
 
-def clean_old_data_files(days=7):
+def clean_old_data_files(days=1):
     """Clean data files older than specified days"""
     try:
         data_dir = os.getenv("DATA_DIR", "data_files")
@@ -80,12 +78,10 @@ def load_private_keys():
     """Load private keys from environment variable and file"""
     private_keys = []
 
-    # Load from environment variable
     env_private_key = os.getenv("PRIVATE_KEY")
     if env_private_key and env_private_key.strip():
         private_keys.append(env_private_key.strip())
 
-    # Try to load from private_keys.txt
     try:
         with open("private_keys.txt", "r") as file:
             keys = [line.strip() for line in file.readlines() if line.strip()]
@@ -106,7 +102,6 @@ def load_rpc_urls():
     """Load RPC URLs from environment variable"""
     rpc_urls_str = os.getenv("RPC_URLS")
     if not rpc_urls_str:
-        # Default RPC URLs
         return [
             "https://16600.rpc.thirdweb.com",
             "https://evm-rpc.0g.testnet.node75.org",
@@ -122,7 +117,6 @@ def load_rpc_urls():
             "https://evm-0g.winnode.xyz"
         ]
     
-    # Split by comma and strip whitespace
     urls = [url.strip() for url in rpc_urls_str.split(",") if url.strip()]
     return urls
 
@@ -135,7 +129,6 @@ def timeout_handler(signum, frame):
 
 class OGDataUploader:
     def __init__(self):
-        # Load configuration from environment
         self.config = {
             "chain_id": int(os.getenv("CHAIN_ID", "16600")),
             "chain_id_hex": hex(int(os.getenv("CHAIN_ID", "16600"))),  # '0x40d8'
@@ -169,7 +162,7 @@ class OGDataUploader:
         self.setup_transaction_monitoring()
         
         # Constants from the contract
-        self.ENTRY_SIZE = 256  # bits
+        self.ENTRY_SIZE = 256
         self.MAX_DEPTH = 64
         self.MAX_LENGTH = 4
 
@@ -223,7 +216,6 @@ class OGDataUploader:
         self.current_key_index = (self.current_key_index + 1) % len(self.private_keys)
         logger.info(f"Rotated to the next wallet (index {self.current_key_index})")
         
-        # Re-initialize web3 with new account
         self.account = self.w3.eth.account.from_key(self.get_current_private_key())
         logger.info(f"Using wallet: {self.account.address}")
         
@@ -231,7 +223,6 @@ class OGDataUploader:
     
     def setup_web3_provider(self):
         """Initialize Web3 with failover between multiple RPC providers"""
-        # Shuffle RPC URLs to avoid always hitting the same one first
         random.shuffle(self.rpc_urls)
         
         for rpc_url in self.rpc_urls:
@@ -259,7 +250,6 @@ class OGDataUploader:
         """Switch to a different RPC if current one fails"""
         logger.warning(f"Current RPC {self.current_rpc} failed, trying another one...")
         
-        # Remove current RPC from list temporarily
         remaining_rpcs = [url for url in self.rpc_urls if url != self.current_rpc]
         random.shuffle(remaining_rpcs)
         
@@ -269,7 +259,6 @@ class OGDataUploader:
                 provider = Web3.HTTPProvider(rpc_url, request_kwargs={'timeout': 30})
                 w3 = Web3(provider)
                 
-                # Test connection
                 if w3.is_connected() and w3.eth.chain_id == self.config["chain_id"]:
                     self.w3 = w3
                     self.current_rpc = rpc_url
@@ -285,14 +274,12 @@ class OGDataUploader:
     def load_contract_abi(self):
         """Load contract ABI from file or use hardcoded ABI"""
         try:
-            # First try to load from file
             if os.path.exists('contract_abi.json'):
                 with open('contract_abi.json', 'r') as f:
                     self.contract_abi = json.load(f)
                     logger.info("Loaded contract ABI from file")
             else:
                 # Hardcoded ABI as fallback - this is the implementation contract ABI
-                # Minimal ABI that just includes the submit function
                 self.contract_abi = json.loads('[{"inputs":[{"components":[{"internalType":"uint256","name":"length","type":"uint256"},{"internalType":"bytes","name":"tags","type":"bytes"},{"components":[{"internalType":"bytes32","name":"root","type":"bytes32"},{"internalType":"uint256","name":"height","type":"uint256"}],"internalType":"struct SubmissionNode[]","name":"nodes","type":"tuple[]"}],"internalType":"struct Submission","name":"submission","type":"tuple"}],"name":"submit","outputs":[{"internalType":"uint256","name":"","type":"uint256"},{"internalType":"bytes32","name":"","type":"bytes32"},{"internalType":"uint256","name":"","type":"uint256"},{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"payable","type":"function"}]')
                 logger.info("Using hardcoded ABI (limited functionality)")
                 
@@ -343,8 +330,6 @@ class OGDataUploader:
             min_price: Minimum storage price per KB in A0GI or None if not available
         """
         try:
-            # Try to call contract method if exists
-            # Note: Method name might be different, adjust based on actual contract
             if hasattr(self.contract.functions, 'getMinimumStoragePrice'):
                 min_price_wei = self.contract.functions.getMinimumStoragePrice().call()
                 min_price = self.w3.from_wei(min_price_wei, 'ether')
@@ -372,20 +357,16 @@ class OGDataUploader:
             storage_fee_wei: Storage endowment fee in wei
         """
         try:
-            # Calculate number of 256B sectors needed
-            SECTOR_SIZE = 256  # 256 bytes per sector as specified
-            num_sectors = math.ceil(file_size_bytes / SECTOR_SIZE)  # Round up to ensure coverage
+            SECTOR_SIZE = 256
+            num_sectors = math.ceil(file_size_bytes / SECTOR_SIZE)
         
             # Get global minimum unit price if available
             global_min_price = self.get_min_unit_price()
         
             if global_min_price:
-                # Use the global minimum as reference
                 logger.info(f"Using global minimum unit price: {global_min_price} A0GI per sector")
                 min_price_per_sector = global_min_price
             else:
-                # Fallback calculation based on estimates
-                # This must be above the global minimum requirement
                 min_price_per_sector = 0.00001  # 0.00001 A0GI per sector as estimate
                 logger.info(f"Using estimated min price: {min_price_per_sector} A0GI per sector")
         
@@ -396,11 +377,9 @@ class OGDataUploader:
             # Formula: SRendowment = SRunit_price * SRdata_size
             storage_endowment = min_price_per_sector * num_sectors * premium_factor
         
-            # Ensure minimum endowment regardless of file size
-            min_total_endowment = 0.00005  # Minimum total endowment
+            min_total_endowment = 0.00005  # Minimum saldo send CA
             storage_endowment = max(min_total_endowment, storage_endowment)
         
-            # Convert to wei
             storage_endowment_wei = self.w3.to_wei(storage_endowment, 'ether')
         
             # Log calculation details
@@ -415,38 +394,31 @@ class OGDataUploader:
             return storage_endowment_wei
         except Exception as e:
             logger.error(f"Error calculating storage fee: {e}")
-            # Return a safe default value
             default_fee = self.w3.to_wei(0.00001, 'ether')  # 0.00001 A0GI
             logger.info(f"Using default storage fee: 0.00001 A0GI")
             return default_fee
 
     def validate_contract_submission(self, submission):
         """Validasi struktur data sesuai dengan ekspektasi kontrak"""
-        # 1. Validasi tipe data
         if not isinstance(submission["length"], int):
             logger.info(f"Converting length from {type(submission['length'])} to int")
             submission["length"] = int(submission["length"])
     
-        # 2. Validasi nodes struktur
         for i, node in enumerate(submission["nodes"]):
             # Pastikan root adalah bytes32
             if not isinstance(node["root"], bytes) or len(node["root"]) != 32:
                 logger.error(f"Node {i}: root harus berupa bytes32, bukan {type(node['root'])}")
                 return False
         
-            # Pastikan height adalah integer
             if not isinstance(node["height"], int):
                 logger.info(f"Converting node height from {type(node['height'])} to int")
                 node["height"] = int(node["height"])
     
-        # 3. Validasi tags - PERUBAHAN: Handle format hex string
         if isinstance(submission["tags"], str) and submission["tags"].startswith("0x"):
-            # Format hex string - OK
             logger.info(f"Tags in hex string format: {submission['tags']}")
         elif not isinstance(submission["tags"], bytes):
             logger.warning(f"Tags harus bytes atau hex string, bukan {type(submission['tags'])}")
             try:
-                # Coba konversi ke format hex string
                 if isinstance(submission["tags"], str):
                     submission["tags"] = "0x" + submission["tags"].encode().hex()
                 else:
@@ -456,7 +428,6 @@ class OGDataUploader:
                 logger.error(f"Failed to convert tags to hex string, using empty hex")
                 submission["tags"] = "0x"
     
-        # 4. Hapus field yang tidak diperlukan
         if "file_path" in submission:
             del submission["file_path"]
         if "network" in submission:
@@ -469,9 +440,9 @@ class OGDataUploader:
         """Decode error message dari smart contract revert"""
         # Pola umum error revert EVM
         revert_patterns = [
-            r"execution reverted: (.*?)$",            # Ganache/Hardhat style
-            r"Error: VM Exception.*?: revert (.*?)$", # Truffle style
-            r"transact to.*?error: (.*?)$"            # Web3py style
+            r"execution reverted: (.*?)$",
+            r"Error: VM Exception.*?: revert (.*?)$",
+            r"transact to.*?error: (.*?)$"
         ]
         
         for pattern in revert_patterns:
@@ -495,7 +466,7 @@ class OGDataUploader:
     def calculate_correct_merkle_height(self, num_leaves):
         """Calculate correct Merkle tree height based on contract requirements"""
         if num_leaves <= 1:
-            return 0  # Just a single node, no tree
+            return 0
         
         # Height is actually number of levels - 1
         # For a balanced binary tree, height = ceil(log2(num_leaves))
@@ -505,8 +476,7 @@ class OGDataUploader:
         current_level = num_leaves
         height = 0
         while current_level > 1:
-            # Number of nodes at next level up
-            current_level = (current_level + 1) // 2  # ceiling division
+            current_level = (current_level + 1) // 2
             height += 1
         
         # Safety check versus calculated value
@@ -514,7 +484,7 @@ class OGDataUploader:
             logger.warning(f"Height mismatch: calculated={calculated_height}, actual={height}")
         
         # Ensure height is within contract limits
-        max_height = self.MAX_DEPTH - 1  # Contract may have MAX_DEPTH limit
+        max_height = self.MAX_DEPTH - 1
         if height > max_height:
             logger.warning(f"Height {height} exceeds max {max_height}, truncating")
             height = max_height
@@ -565,7 +535,6 @@ class OGDataUploader:
         with open(file_path, 'rb') as f:
             data = f.read()
         
-        # Split into chunks
         chunk_files = []
         for i in range(0, len(data), CHUNK_SIZE):
             chunk_data = data[i:i+CHUNK_SIZE]
@@ -597,16 +566,13 @@ class OGDataUploader:
                 # Option 1: Handle stuck transactions by replacing them
                 self.check_and_replace_stuck_transactions(address, latest_nonce, pending_nonce)
                 
-                # Return the highest nonce we're confident about
                 return latest_nonce + 1
             
-            # Normal case: use pending nonce
             logger.info(f"Using nonce {pending_nonce} (latest: {latest_nonce}, pending: {pending_nonce-latest_nonce})")
             return pending_nonce
         
         except Exception as e:
             logger.error(f"Error determining nonce: {e}")
-            # Fallback to latest
             return self.w3.eth.get_transaction_count(address)
 
     def check_and_replace_stuck_transactions(self, address, latest_nonce, pending_nonce):
@@ -616,15 +582,13 @@ class OGDataUploader:
         # Check the last few blocks for pending transactions
         for nonce in range(latest_nonce, pending_nonce):
             try:
-                # Try to get transaction with this nonce
                 txs = self.w3.eth.filter({
                     "fromBlock": self.w3.eth.block_number - 50,
                     "toBlock": "latest",
-                    "address": None,  # any address
-                    "topics": []  # any topics
+                    "address": None,
+                    "topics": []
                 }).get_all_entries()
                 
-                # Filter to find our transaction
                 our_txs = [tx for tx in txs if tx.get('from', '').lower() == address.lower()]
                 
                 if not our_txs:
@@ -635,8 +599,8 @@ class OGDataUploader:
                         'from': address,
                         'to': address,
                         'value': 0,
-                        'gas': 21000,  # Minimum gas for a transfer
-                        'gasPrice': int(self.w3.eth.gas_price * 1.5),  # Higher gas price to replace
+                        'gas': 21000,
+                        'gasPrice': int(self.w3.eth.gas_price * 1.5),
                         'nonce': nonce,
                         'chainId': self.config["chain_id"]
                     }
@@ -650,7 +614,6 @@ class OGDataUploader:
 
     def setup_transaction_monitoring(self):
         """Setup monitoring for transaction activity"""
-        # Create diagnostic data structure
         self.diagnostics = {
             "transaction_history": [],
             "gas_price_history": [],
@@ -678,18 +641,15 @@ class OGDataUploader:
                 "details": details or {}
             }
             self.diagnostics["transaction_history"].append(event)
-            # Keep history manageable
             if len(self.diagnostics["transaction_history"]) > 100:
                 self.diagnostics["transaction_history"] = self.diagnostics["transaction_history"][-100:]
             
-            # Save diagnostics
             try:
                 with open(self.diagnostics_file, "w") as f:
                     json.dump(self.diagnostics, f, indent=2)
             except:
                 pass
         
-        # Attach to instance
         self.capture_tx_event = capture_tx_event
         
         # Monitor gas price changes
@@ -703,16 +663,13 @@ class OGDataUploader:
                     "gas_price_gwei": current_gwei
                 })
                 
-                # Keep history manageable
                 if len(self.diagnostics["gas_price_history"]) > 100:
                     self.diagnostics["gas_price_history"] = self.diagnostics["gas_price_history"][-100:]
             except:
                 pass
         
-        # Run initially
         update_gas_stats()
         
-        # Schedule regular updates
         self.gas_monitor_thread = threading.Thread(target=lambda: (
             time.sleep(60), update_gas_stats(), True
         ))
@@ -747,7 +704,6 @@ class OGDataUploader:
         def optimize_number(n):
             """Reduce precision of numbers to save space"""
             if isinstance(n, float):
-                # Keep only 2 decimal places for most values
                 return round(n, 2)
             return n
         
@@ -755,10 +711,8 @@ class OGDataUploader:
         def optimize_dict(d):
             result = {}
             for k, v in d.items():
-                # Use shorter key if available
                 new_key = key_mapping.get(k, k)
                 
-                # Optimize value based on type
                 if isinstance(v, dict):
                     result[new_key] = optimize_dict(v)
                 elif isinstance(v, list):
@@ -772,13 +726,11 @@ class OGDataUploader:
                     result[new_key] = v
             return result
         
-        # Optimize structure
         optimized = optimize_dict(data_dict)
         
         # 4. If still too large, increase compression
         optimized_json = json.dumps(optimized)
         if len(optimized_json.encode('utf-8')) > 8000:  # 8KB threshold
-            # Remove less essential data
             if 'hdl' in optimized and len(optimized.get('hdl', [])) > 5:
                 optimized['hdl'] = optimized['hdl'][:5]
                 optimized['note'] = 'trunc'
@@ -805,7 +757,6 @@ class OGDataUploader:
             # Check contract parameters and limitations
             contract_constants = {}
             
-            # Try to read constants if methods are available
             try:
                 # These would be read-only methods on the contract if available
                 contract_constants["MAX_DEPTH"] = self.contract.functions.MAX_DEPTH().call()
@@ -818,20 +769,16 @@ class OGDataUploader:
             # Check turbo mode requirements
             if self.config.get("network", "").lower() == "turbo":
                 logger.info("Using Turbo mode - tags should be empty bytes")
-                # In Turbo mode, tags are expected to be empty (based on your code logic)
                 contract_constants["TAGS_REQUIRED"] = False
             else:
                 logger.info("Using Standard mode - tags are recommended")
                 contract_constants["TAGS_REQUIRED"] = True
             
-            # Save for future reference
             self.contract_constants = contract_constants
             
-            # This will help with diagnostics
             return contract_constants
         except Exception as e:
             logger.error(f"Error analyzing contract requirements: {e}")
-            # Return default values
             return {
                 "MAX_DEPTH": self.MAX_DEPTH,
                 "TAGS_REQUIRED": self.config.get("network", "").lower() != "turbo"
@@ -854,7 +801,6 @@ class OGDataUploader:
             errors.append("Submission must have at least one node")
         
         for i, node in enumerate(submission["nodes"]):
-            # Check height doesn't exceed MAX_DEPTH
             if node["height"] >= self.contract_constants.get("MAX_DEPTH", self.MAX_DEPTH):
                 errors.append(f"Node {i} height {node['height']} exceeds MAX_DEPTH {self.contract_constants.get('MAX_DEPTH', self.MAX_DEPTH)}")
                 # Auto-fix
@@ -919,15 +865,13 @@ class OGDataUploader:
                 headlines = data.get('headlines', [])
                 original_count = len(headlines)
                 
-                # Reduce by removing headlines until under size limit
                 while data_size_kb > self.config["max_file_size_kb"] and len(data['headlines']) > 5:
-                    data['headlines'] = data['headlines'][:-1]  # Remove one at a time
+                    data['headlines'] = data['headlines'][:-1]
                     data['note'] = f"Data trimmed from {original_count} to {len(data['headlines'])} headlines due to size limit"
                     data_str = json.dumps(data)
                     data_size_kb = len(data_str.encode('utf-8')) / 1024
             
             elif source_name == "crypto_prices":
-                # For crypto prices, reduce by removing additional data
                 if 'market_stats' in data:
                     del data['market_stats']
                     data['note'] = "Market stats removed due to size limit"
@@ -937,7 +881,6 @@ class OGDataUploader:
                 # If still too large, simplify cryptocurrency data
                 if data_size_kb > self.config["max_file_size_kb"] and 'cryptocurrencies' in data:
                     for coin in data['cryptocurrencies']:
-                        # Remove less essential fields to reduce size
                         for field in ['description', 'links', 'image', 'community_data', 'developer_data']:
                             if field in coin:
                                 del coin[field]
@@ -964,12 +907,11 @@ class OGDataUploader:
         current_retry = 0
         last_error = None
     
-        logger.info(f"=== Step 2: Preparing Registration Transaction ===")
+        logger.info(f"{Fore.YELLOW} Step 2: Preparing Registration Transaction{Fore.RESET}")
     
         # Get network from submission
         network = submission.get("network", "turbo")
 
-        # Add delay between transaction attempts
         if hasattr(self, 'last_tx_attempt') and (datetime.now() - self.last_tx_attempt).total_seconds() < 60:
             delay = random.randint(8, 21)
             logger.info(f"Adding {delay} seconds delay before transaction...")
@@ -995,7 +937,7 @@ class OGDataUploader:
         logger.info(f"File Size: {file_size_kb:.2f} KB")
         logger.info(f"Storage Endowment: {storage_fee:.8f} A0GI")
     
-        if file_size_kb > 200:  # If file is larger than 200KB, warn about gas
+        if file_size_kb > 200:
             logger.warning(f"Data file is {file_size_kb:.2f}KB which may require significant gas")
         
         while current_retry < max_retries:
@@ -1016,20 +958,15 @@ class OGDataUploader:
             
                 logger.info(f"Gas Price: {self.w3.from_wei(gas_price, 'gwei')} Gwei")
             
-                # SANGAT PENTING: Format parameter dalam array sesuai ABI kontrak
-                # [uint256, bytes, [bytes32, uint256][]]
-            
-                # Konversi tags ke format yang benar - harus bytes untuk ABI
                 if isinstance(submission["tags"], str) and submission["tags"].startswith("0x"):
-                    # Konversi hex string ke bytes
                     tags_bytes = bytes.fromhex(submission["tags"][2:])
                 else:
                     tags_bytes = b''
             
                 # Format parameter sesuai spesifikasi kontrak
                 contract_submission = [
-                    submission["length"],  # uint256
-                    tags_bytes,  # bytes
+                    submission["length"],
+                    tags_bytes,
                     [[node["root"], node["height"]] for node in submission["nodes"]]  # [bytes32,uint256][]
                 ]
             
@@ -1037,20 +974,19 @@ class OGDataUploader:
                 logger.info(f"Parameters: length={contract_submission[0]}, tags={submission['tags']}, nodes_count={len(contract_submission[2])}")
             
                 # Gas estimation
-                gas_limit = 150000  # Default
+                gas_limit = 160000
                 try:
                     # Estimate gas
                     gas_estimate = self.contract.functions.submit(contract_submission).estimate_gas({
                         'from': self.account.address,
                         'nonce': nonce,
-                        'value': storage_fee_wei  # PENTING: Sertakan storage fee sebagai value
+                        'value': storage_fee_wei
                     })
                 
                     gas_limit = int(gas_estimate * 1.1)  # 10% buffer
                     logger.info(f"Estimated gas: {gas_estimate}, using {gas_limit} with buffer")
                 except Exception as e:
-                    # Fallback ke heuristik
-                    gas_limit = 200000  # Cukup untuk file kecil
+                    gas_limit = 200000
                     logger.warning(f"Gas estimation failed: {e}. Using default: {gas_limit}")
             
                 # Calculate gas fee
@@ -1061,15 +997,14 @@ class OGDataUploader:
                 # Total fee
                 total_fee = self.w3.from_wei(gas_fee + storage_fee_wei, 'ether')
                 logger.info(f"Total Fee: {total_fee:.18f} A0GI")
-            
-                # Build transaction
+
                 tx = self.contract.functions.submit(contract_submission).build_transaction({
                     'from': self.account.address,
                     'gas': gas_limit,
                     'gasPrice': gas_price,
                     'nonce': nonce,
                     'chainId': self.config["chain_id"],
-                    'value': storage_fee_wei  # PENTING: Sertakan storage fee sebagai value
+                    'value': storage_fee_wei
                 })
             
                 # Sign and send transaction
@@ -1079,11 +1014,10 @@ class OGDataUploader:
                 tx_hash_hex = tx_hash.hex()
             
                 logger.info(f"Transaction sent: {tx_hash_hex}")
-                logger.info(f"✓ Registration transaction submitted successfully")
+                logger.info(f"{Fore.MAGENTA} ✓ Registration transaction submitted successfully{Fore.RESET}")
             
-                logger.info(f"=== Step 3: Waiting for checking file metadata... ===")
+                logger.info(f"{Fore.YELLOW} Step 3: Waiting for checking file metadata...{Fore.RESET}")
             
-                # Wait for receipt with improved handling
                 receipt = None
                 wait_time = 0
                 max_wait = 180
@@ -1113,13 +1047,13 @@ class OGDataUploader:
                         gas_used = receipt.get('gasUsed')
                         actual_gas_fee = self.w3.from_wei(gas_used * gas_price, 'ether')
                     
-                        logger.info(f"Upload complete! Transaction successful in block {block_number}")
+                        logger.info(f"Upload complete! Transaction successful in block #{block_number}")
                         logger.info(f"Gas used: {gas_used} ({(gas_used/gas_limit)*100:.1f}% of limit)")
                         logger.info(f"Actual gas fee: {actual_gas_fee:.18f} A0GI")
                         logger.info(f"Storage node fee: {storage_fee:.12f} A0GI")
                         logger.info(f"Total fee paid: {actual_gas_fee + storage_fee:.12f} A0GI")
                         logger.info(f"Root hash: {submission.get('root_hash')}")
-                        logger.info(f"✓ Data successfully uploaded and registered on-chain!")
+                        logger.info(f"{Fore.MAGENTA}✓ Data successfully uploaded and registered on-chain!{Fore.RESET}")
                     
                         # Clean up file if needed
                         if 'file_path' in submission and os.path.exists(submission['file_path']):
@@ -1129,14 +1063,13 @@ class OGDataUploader:
                         return receipt
                     else:
                         # Transaction failed
-                        logger.error(f"✗ Transaction failed on-chain. Status: {receipt.get('status')}")
+                        logger.error(f"{Fore.RED}✗ Transaction failed on-chain. Status: {receipt.get('status')}{Fore.RESET}")
                         logger.error(f"Gas used: {receipt.get('gasUsed')}")
                     
                         # Decode error if possible
                         error_type = "UNKNOWN_ERROR"
                         if receipt.get('logs'):
                             for log in receipt.get('logs'):
-                                # Try to decode logs for error info
                                 logger.info(f"Transaction log: {log}")
                     
                         # If out of gas, adjust for next attempt
@@ -1155,7 +1088,6 @@ class OGDataUploader:
                     except Exception as e:
                         logger.warning(f"Error checking transaction status: {str(e)}")
                 
-                    # Try different RPC
                     if not self.retry_with_new_rpc():
                         time.sleep(random.randint(10, 30))
         
@@ -1207,9 +1139,8 @@ class OGDataUploader:
     def prepare_simple_submission(self, file_path, network="turbo"):
         """Prepare a simplified submission for small files exactly matching successful format"""
         try:
-            logger.info(f"=== Step 1: Upload Prepared - {file_path} ===")
+            logger.info(f"{Fore.YELLOW} Step 1: Upload File Prepared{Fore.RESET} data is {Fore.MAGENTA}{file_path} {Fore.RESET}")
     
-            # Read file
             with open(file_path, 'rb') as f:
                 data_bytes = f.read()
         
@@ -1221,19 +1152,17 @@ class OGDataUploader:
             root_hash_hex = file_hash.hex()
             logger.info(f"Root Hash is: {root_hash_hex}")
 
-            # PERUBAHAN: Gunakan height 0 seperti pada contoh berhasil
             submission_nodes = [{
                 "root": file_hash,
                 "height": 0
             }]
         
             # PENTING: Format parameter sesuai ABI kontrak
-            # Gunakan uint256 untuk length - ini mungkin jumlah bytes
+            # Gunakan uint256 untuk length
             length = len(data_bytes)
         
             logger.info(f"Setting length to {length} (bytes) instead of {len(data_bytes) * 8} (bits)")
             
-            # Untuk tags gunakan hex string kosong "0x" (sesuai contoh berhasil)
             tags = "0x"
         
             # Persiapkan submission dalam format yang tepat
@@ -1248,9 +1177,8 @@ class OGDataUploader:
                     "root_hash": root_hash_hex,
                     "file_size_kb": file_size_kb
                 }
-                logger.info(f"✓ Upload successfully prepared")
+                logger.info(f"{Fore.MAGENTA} ✓ Upload successfully prepared {Fore.RESET}")
             else:
-                # Standard format - gunakan source name sebagai tag
                 source_tag = "0x" + os.path.basename(file_path).split('_')[0].encode().hex()
                 submission = {
                     "length": length,  # Gunakan jumlah bytes, bukan bits
@@ -1261,9 +1189,8 @@ class OGDataUploader:
                 }
                 logger.info(f"Prepared Standard format with tag: {source_tag}")
         
-            # Log detail submission untuk debugging
             logger.info(f"Submission details: length={submission['length']}, tags={submission['tags']}")
-            logger.info(f"Node details: root={submission['nodes'][0]['root'].hex()}, height={submission['nodes'][0]['height']}")
+            logger.info(f"Node details: root-hash {submission['nodes'][0]['root'].hex()}, height={submission['nodes'][0]['height']}")
         
             return submission
         
@@ -1282,7 +1209,6 @@ class OGDataUploader:
         try:
             logger.info(f"Fetching data from CoinGecko API")
             
-            # Using the exact format provided in the example
             url = "https://api.coingecko.com/api/v3/coins/markets"
             
             params = {
