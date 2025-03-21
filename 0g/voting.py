@@ -11,35 +11,31 @@ from colorama import Fore, Style, init
 from dotenv import load_dotenv
 
 init(autoreset=True)
-# color & load env
 load_dotenv()
 
 # ======================== Configuration ========================
 CONFIG = {
-    "RPC_URLS": os.getenv(
-        "RPC_URLS",
-        "https://16600.rpc.thirdweb.com,https://rpc.ankr.com/0g_newton,https://evmrpc-testnet.0g.ai",
-    ).split(","),
-    "CONTRACT_ADDRESS": os.getenv(
-        "CONTRACT_ADDRESS", "0x90723fb8FC109096c69BDb73E801989807E7C81F"
-    ),
+    "RPC_URLS": os.getenv("RPC_URLS","https://16600.rpc.thirdweb.com,https://rpc.ankr.com/0g_newton,https://evmrpc-testnet.0g.ai",).split(","),
+    "CONTRACT_ADDRESS": os.getenv("CONTRACT_ADDRESS", "0x90723fb8FC109096c69BDb73E801989807E7C81F"),
     "PRIVATE_KEY_FILE": os.path.join(os.path.dirname(__file__), "private_keys.txt"),
     "ENV_FILE": ".env",
     "MAX_RETRIES": 5,
-    "GAS_MULTIPLIER": 1.5,
-    "MAX_PRIORITY_GWEI": 2.5,
-    "GAS_LIMIT": 310000,
-    "COOLDOWN": {"SUCCESS": 15, "ERROR": 30},
-    # Short delay in wallet secs
-    "WALLET_SWITCH_DELAY": (120, 480),
-    # Long delay after all wallets use secs
-    "CYCLE_COMPLETE_DELAY": (3600, 7200),
+    "GAS_MULTIPLIER": 1.01,
+    "MAX_PRIORITY_GWEI": 5,
+    "GAS_LIMIT": 200000,
+    "GAS_MIN_GWEI": 3.5,
+    "GAS_MAX_GWEI": 15.0,
+    "GAS_RESET_GWEI": 5.0,
+    "COOLDOWN": {"SUCCESS": (10, 30), "ERROR": (30, 60)},
+    "WALLET_SWITCH_DELAY": (120, 480),  # Short delay wallet secons
+    "CYCLE_COMPLETE_DELAY": (3600, 7200), # Long delay all wallets use secons
+    "RPC_TIMEOUT": 15,  # detik
+    "RPC_RETRY_DELAY": 8,  # detik
 }
 
 # ======================== Chain Symbol ========================
 CHAIN_SYMBOLS = {1: "ETH", 16600: "A0GI"}
 
-# Tx counter
 tx_counter = 0
 
 # ======================== ABI Contract ========================
@@ -74,8 +70,7 @@ ABI = [
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
-    datefmt="%H:%M:%S",
-)
+    datefmt="%H:%M:%S",)
 logger = logging.getLogger("VoteDapps")
 
 def log_info(message):
@@ -102,16 +97,29 @@ def sleep_seconds(seconds, message=None):
     if message:
         print(f"9️⃣ {Fore.GREEN}{message} in {seconds} seconds...{Style.RESET_ALL}")
     else:
-        print(
-            f"9️⃣ {Fore.GREEN}Mode airplane..Rotating sleep in {seconds} seconds...{Style.RESET_ALL}"
-        )
+        print(f"9️⃣ {Fore.GREEN}Mode airplane..Rotating sleep in {seconds} seconds...{Style.RESET_ALL}")
     time.sleep(seconds)
+    
+def validate_rpc_urls(urls):
+    """Validate RPC URLs to ensure they are formatted correctly."""
+    valid_urls = []
+    for url in urls:
+        url = url.strip()
+        if url and url.startswith("http"):
+            valid_urls.append(url)
+        else:
+            log_warning(f"Invalid RPC URL ignored: {url}")
+    
+    if not valid_urls:
+        log_error("No valid RPC URL found. Using default.")
+        return ["https://evmrpc-testnet.0g.ai"]
+    
+    return valid_urls
 
-
-# Print banner
+# ================ Print banner =================
 def print_welcome_message():
     welcome_banner = f"""
-{Fore.GREEN}============================ WELCOME TO VOTING DAPPs ============================{Fore.RESET}
+{Fore.GREEN}================== WELCOME TO VOTING DAPPs ======================={Fore.RESET}
 {Fore.YELLOW}
  ██████╗██╗   ██╗ █████╗ ███╗   ██╗███╗   ██╗ ██████╗ ██████╗ ███████╗
 ██╔════╝██║   ██║██╔══██╗████╗  ██║████╗  ██║██╔═══██╗██╔══██╗██╔════╝
@@ -132,9 +140,7 @@ def print_welcome_message():
 def is_connected(web3):
     try:
         chain_id = web3.eth.chain_id
-        print(
-            f"1️⃣  Connected to network with chain ID: {Fore.MAGENTA}{chain_id}{Fore.RESET}"
-        )
+        print(f"1️⃣  Connected to network with chain ID: {Fore.MAGENTA}{chain_id}{Fore.RESET}")
         return chain_id
     except Exception as e:
         print(f"0️⃣  Failed to connect to the network: {e}")
@@ -149,67 +155,74 @@ class VoteScheduler:
         self.web3 = None
         self.contract = None
         self.cycle_count = 1
+        self.current_rpc_index = 0
+        self.rpc_last_error_time = {}
 
     def initialize(self):
+        CONFIG["RPC_URLS"] = validate_rpc_urls(CONFIG["RPC_URLS"])
         self.connect_to_rpc()
         self.load_accounts()
         self.update_gas_price()
 
     def connect_to_rpc(self):
-        """Connect to the first available RPC endpoint"""
-        for rpc_url in CONFIG["RPC_URLS"]:
+        """Connect to RPC endpoint, with rotation on failure"""
+        for i, rpc_url in enumerate(CONFIG["RPC_URLS"]):
             try:
-                w3 = Web3(Web3.HTTPProvider(rpc_url.strip()))
-                if w3.is_connected() and w3.eth.chain_id == int(
-                    os.getenv("CHAIN_ID", "16600")
-                ):
+                self.current_rpc_index = i
+                w3 = Web3(Web3.HTTPProvider(rpc_url.strip(), request_kwargs={'timeout': CONFIG["RPC_TIMEOUT"]}))
+                if w3.is_connected():
+                    chain_id = w3.eth.chain_id
+                    print(f"🌐 Connected to the RPC: {rpc_url}")
+                    print(f"📡 Chain ID: {chain_id} - {CHAIN_SYMBOLS.get(chain_id, 'Unknown')}")
                     self.web3 = w3
-                    self.contract = self.web3.eth.contract(
-                        address=CONFIG["CONTRACT_ADDRESS"], abi=ABI
-                    )
-                    print(
-                        f"🌐 Already connected to RPC: {Fore.MAGENTA}{rpc_url}{Style.RESET_ALL}"
-                    )
+                    self.contract = self.web3.eth.contract(address=CONFIG["CONTRACT_ADDRESS"], abi=ABI)
+                    self.rpc_last_error_time[rpc_url] = 0
                     return True
             except Exception as e:
-                print(f"⚠️ Failed to connect to RPC {rpc_url}: {e}")
-                continue
-
+                print(f"⚠️ Failed to connect to RPC {rpc_url}: {str(e)}")
+                self.rpc_last_error_time[rpc_url] = time.time()
+        
         if not self.web3:
-            raise ConnectionError(
-                "Failed to connect to any RPC endpoint. Please check your RPC URLs."
-            )
+            print("❌ Failed to connect to all RPC endpoints.")
+            raise ConnectionError("Unable to connect to 0G network. Check RPC URLs.")
 
-    def retry_with_new_rpc(self):
-        """Try to connect to a different RPC endpoint"""
-        current_url = None
-        for provider in self.web3.provider._active_providers:
-            if hasattr(provider, "endpoint_uri"):
-                current_url = provider.endpoint_uri
-                break
-
-        remaining_urls = [
-            url.strip() for url in CONFIG["RPC_URLS"] if url.strip() != current_url
+    def switch_rpc(self):
+        """Switch to another RPC if a problem occurs, prioritizing those that have not yet crashed"""
+        old_index = self.current_rpc_index
+        old_rpc = CONFIG["RPC_URLS"][old_index]
+        
+        now = time.time()
+        available_rpcs = [
+            (i, url) for i, url in enumerate(CONFIG["RPC_URLS"]) 
+            if i != old_index and (url not in self.rpc_last_error_time or now - self.rpc_last_error_time[url] > 60)
         ]
-        random.shuffle(remaining_urls)
+        
+        # gunakan semua RPC selain yang saat ini
+        if not available_rpcs:
+            available_rpcs = [(i, url) for i, url in enumerate(CONFIG["RPC_URLS"]) if i != old_index]
+        
+        if not available_rpcs:
+            sleep_seconds(CONFIG["RPC_RETRY_DELAY"], "Menunggu sebelum mencoba ulang RPC yg sama bang")
+            return False
+        
+        # random RPC
+        self.current_rpc_index, new_rpc = random.choice(available_rpcs)
+        
+        print(f"🔄 Switch to old RPC {Fore.RED} {old_rpc} {Fore.RESET} --> {Fore.GREEN} {new_rpc} {Style.RESET_ALL}")
+        
+        try:
+            self.web3 = Web3(Web3.HTTPProvider(new_rpc.strip(), request_kwargs={'timeout': CONFIG["RPC_TIMEOUT"]}))
+            if self.web3.is_connected():
+                self.contract = self.web3.eth.contract(address=CONFIG["CONTRACT_ADDRESS"], abi=ABI)
+                print(f"✅ Successfully switched to RPC: {new_rpc}")
+                self.rpc_last_error_time[new_rpc] = 0
+                return True
+        except Exception as e:
+            print(f"❌ Failed to switch to RPC {new_rpc}: {str(e)}")
+            self.rpc_last_error_time[new_rpc] = time.time()
+            self.current_rpc_index = old_index
+            return self.switch_rpc()
 
-        for rpc_url in remaining_urls:
-            try:
-                w3 = Web3(Web3.HTTPProvider(rpc_url))
-                if w3.is_connected() and w3.eth.chain_id == int(
-                    os.getenv("CHAIN_ID", "16600")
-                ):
-                    self.web3 = w3
-                    self.contract = self.web3.eth.contract(
-                        address=CONFIG["CONTRACT_ADDRESS"], abi=ABI
-                    )
-                    print(f"🔄 Switched to other RPC: {Fore.MAGENTA}{rpc_url}{Style.RESET_ALL}")
-                    return True
-            except Exception as e:
-                print(f"⚠️ Failed to switch to RPC {rpc_url}: {e}")
-                continue
-
-        print(f"{Fore.RED}Failed to switch to any alternative RPC{Style.RESET_ALL}")
         return False
 
     def is_valid_private_key(self, key):
@@ -243,12 +256,8 @@ class VoteScheduler:
                     if valid_key:
                         account = self.web3.eth.account.from_key(valid_key)
                         accounts.append({"key": valid_key, "address": account.address})
-                        print(
-                            f"3️⃣ Attempting to load wallet... {Fore.GREEN}Status: OK gas Bang!!!{Style.RESET_ALL}"
-                        )
-                        print(
-                            f"4️⃣ Wallet loaded successfully -> EVM Address: {account.address}"
-                        )
+                        print(f"3️⃣ Attempting to load wallet... {Fore.GREEN}Status: OK gas Bang!!!{Style.RESET_ALL}")
+                        print(f"4️⃣ Wallet loaded successfully -> EVM Address: {account.address}")
             except Exception as e:
                 log_error(f"Error loading from .env: {str(e)}")
 
@@ -261,22 +270,12 @@ class VoteScheduler:
                         valid_key = self.is_valid_private_key(key)
                         if valid_key:
                             account = self.web3.eth.account.from_key(valid_key)
-                            if not any(
-                                acc["address"] == account.address for acc in accounts
-                            ):
-                                accounts.append(
-                                    {"key": valid_key, "address": account.address}
-                                )
-                                print(
-                                    f"3️⃣ Attempting to load wallet... {Fore.GREEN}Status: OK gas Bang!!!{Style.RESET_ALL}"
-                                )
-                                print(
-                                    f"4️⃣ Wallet loaded successfully -> EVM Address: {account.address}"
-                                )
+                            if not any(acc["address"] == account.address for acc in accounts):
+                                accounts.append({"key": valid_key, "address": account.address})
+                                print(f"3️⃣ Attempting to load wallet... {Fore.GREEN}Status: OK gas Bang!!!{Style.RESET_ALL}")
+                                print(f"4️⃣ Wallet loaded successfully -> EVM Address: {account.address}")
                         else:
-                            print(
-                                f"3️⃣ Attempting to load wallet... {Fore.RED}Status: FAILED{Style.RESET_ALL}"
-                            )
+                            print(f"3️⃣ Attempting to load wallet... {Fore.RED}Status: FAILED{Style.RESET_ALL}")
                             print("Invalid key format or length")
             except Exception as e:
                 log_error(f"Error loading private keys: {str(e)}")
@@ -323,17 +322,41 @@ class VoteScheduler:
             return None
 
     def get_legacy_gas_price(self):
-        """Get legacy gas price"""
+        """Get legacy gas price with fallback to default value if it fails"""
         try:
             current = self.web3.eth.gas_price
-            gas_price = int(current * CONFIG["GAS_MULTIPLIER"])
-            gas_gwei = self.web3.from_wei(gas_price, "gwei")
-            print(f"⚡ Gas price updated: {Fore.MAGENTA}{gas_gwei:.9f} Gwei{Fore.RESET} (Legacy Mode)")
-            return gas_price
-        except Exception as e:
-            log_error(f"Legacy gas estimation failed: {str(e)}")
-            return self.web3.to_wei(50, "gwei")  # Safe fallback
 
+            min_gas = self.web3.to_wei(CONFIG["GAS_MIN_GWEI"], "gwei")
+            max_gas = self.web3.to_wei(CONFIG["GAS_MAX_GWEI"], "gwei")
+                
+            gas_price = int(current * CONFIG["GAS_MULTIPLIER"])
+                
+            if gas_price < min_gas:
+                gas_price = min_gas
+            elif gas_price > max_gas:
+                gas_price = max_gas
+            
+            gas_gwei = self.web3.from_wei(gas_price, "gwei")
+            print(f"⛽ Gas price: {gas_gwei:.2f} Gwei (Legacy Mode)")
+            return gas_price
+        
+        except Exception as e:
+            print(f"❌ Legacy gas estimates fail: {str(e)}")
+            default_gas = self.web3.to_wei(CONFIG["GAS_MIN_GWEI"], "gwei")
+            print(f"⚠️ Used price default: {CONFIG['GAS_MIN_GWEI']} Gwei")
+            return default_gas
+
+    def reset_gas_price(self):
+        """Reset gas price to reasonable initial value after too many retries"""
+        if isinstance(self.gas_price, dict):
+            self.gas_price["maxFeePerGas"] = self.web3.to_wei(CONFIG["GAS_RESET_GWEI"], "gwei")
+            self.gas_price["maxPriorityFeePerGas"] = self.web3.to_wei(1, "gwei")
+            print(f"⚠️ Gas price was reset to value (EIP-1559)")
+        else:
+            self.gas_price = self.web3.to_wei(CONFIG["GAS_RESET_GWEI"], "gwei")
+            print(f"⚠️ Gas price was reset to value (Legacy)")
+        return self.gas_price
+    
     def update_gas_price(self):
         """Update gas price with EIP-1559 or legacy mode"""
         # Try EIP-1559 first
@@ -351,18 +374,23 @@ class VoteScheduler:
 
             balance_wei = self.web3.eth.get_balance(address)
             balance_eth = self.web3.from_wei(balance_wei, "ether")
-            print(
-                f"5️⃣ Checking wallet balance: {Fore.YELLOW}{balance_eth:.6f} {token_symbol}{Fore.RESET}"
-            )
+            print(f"5️⃣ Checking wallet balance: {Fore.YELLOW}{balance_eth:.6f} {token_symbol}{Fore.RESET}")
             return balance_wei
         except Exception as e:
+            # Check for RPC specific errors
+            if "429" in str(e) or "too many requests" in str(e).lower():
+                print(f"⚠️ RPC error while checking balance. Switching RPC...")
+                if self.switch_rpc():
+                    # Try again with new RPC
+                    return self.get_wallet_balance(address)
+
             log_error(f"Error getting balance: {str(e)}")
             return 0
 
     def estimate_gas(self, sender):
         try:
             gas_estimate = self.contract.functions.Vote().estimate_gas({"from": sender})
-            return int(gas_estimate * 1.3)  # Add 20% buffer
+            return int(gas_estimate * 1.1)  # Add 10% buffer
         except Exception as e:
             print(f"⚠️ Gas estimation failed: {str(e)}. Using safe default.")
             return CONFIG["GAS_LIMIT"]
@@ -391,8 +419,7 @@ class VoteScheduler:
                 messages = ["0G AI layer 1", "Vote Eco", "0G Gravity", "0Gmorning", "VoteDapps", ""]
                 message = random.choice(messages)
                 tx["data"] = self.contract.encodeABI(
-                    fn_name="VoteWithMessage", args=[message]
-                )
+                    fn_name="VoteWithMessage", args=[message])
                 print(f"🔵 Vote With random Message (string code) transaction prepared: '{message}'")
 
             if isinstance(self.gas_price, dict):
@@ -401,9 +428,7 @@ class VoteScheduler:
             else:
                 tx["gasPrice"] = self.gas_price
 
-            print(
-                f"🔵 Transaction onchain data with nonce -> {Fore.YELLOW}[{nonce}]{Style.RESET_ALL}"
-            )
+            print(f"🔵 Transaction onchain data with nonce -> {Fore.YELLOW}[{nonce}]{Style.RESET_ALL}")
             return tx
 
         except Exception as e:
@@ -414,10 +439,17 @@ class VoteScheduler:
         """Handle transaction error and update tx if needed"""
         error_message = str(error)
 
+        # Handle RPC throttling/limiting
+        if "429" in error_message or "too many requests" in error_message.lower():
+            print(f"{Fore.YELLOW}⚠️ RPC limiting requests (429). Switching RPC...{Style.RESET_ALL}")
+            if self.switch_rpc():
+                return tx, True
+            else:
+                time.sleep(CONFIG["COOLDOWN"]["ERROR"][0])
+                return tx, True
+
         if "insufficient funds" in error_message.lower():
-            print(
-                f"{Fore.RED}Error: 💰 Insufficient funds for gas * price + value{Style.RESET_ALL}"
-            )
+            print(f"{Fore.RED}Error: 💰 Insufficient funds for gas * price + value{Style.RESET_ALL}")
             return None, False
 
         elif "nonce too low" in error_message.lower():
@@ -430,87 +462,82 @@ class VoteScheduler:
                 log_error(f"Error updating nonce: {str(nonce_error)}")
                 return None, False
 
-        elif any(
-            msg in error_message.lower() for msg in ["fee too low", "underpriced"]
-        ):
-            if isinstance(self.gas_price, dict):
-                self.gas_price["maxFeePerGas"] = int(
-                    self.gas_price["maxFeePerGas"] * 1.8
-                )
-                self.gas_price["maxPriorityFeePerGas"] = int(
-                    self.gas_price["maxPriorityFeePerGas"] * 1.8
-                )
-
-                tx["maxFeePerGas"] = self.gas_price["maxFeePerGas"]
-                tx["maxPriorityFeePerGas"] = self.gas_price["maxPriorityFeePerGas"]
-
-                new_max_fee_gwei = self.web3.from_wei(
-                    self.gas_price["maxFeePerGas"], "gwei"
-                )
-                print(
-                    f" 🤯 Transaction fees too low. Increased to {new_max_fee_gwei:.6f} Gwei"
-                )
-            else:
-                self.gas_price = int(self.gas_price * 1.5)
-                tx["gasPrice"] = self.gas_price
-                new_gas_gwei = self.web3.from_wei(self.gas_price, "gwei")
-                print(
-                    f" 🤯 Transaction fees too low. Increased to {new_gas_gwei:.6f} Gwei"
-                )
-
-            return tx, True
-
+        
+        elif any(msg in error_message.lower() for msg in ["fee too low", "underpriced"]):
+            return self.increase_gas_price(tx, 1.01, "Transaction fees too low")
+        
         # Mempool full error
         elif "mempool is full" in error_message.lower():
-            print(
-                f"{Fore.RED}⚠️ Mempool is full. Trying to switch RPC...{Style.RESET_ALL}"
-            )
-            if self.retry_with_new_rpc():
+            print(f"{Fore.RED}⚠️ Mempool is full. Trying to switch RPC...{Style.RESET_ALL}")
+            if self.switch_rpc():
                 return tx, True
             else:
                 # If can't switch RPC, wait longer and retry with higher gas
-                time.sleep(CONFIG["COOLDOWN"]["ERROR"] * 2)
+                time.sleep(CONFIG["COOLDOWN"]["ERROR"][0])
                 if isinstance(self.gas_price, dict):
-                    self.gas_price["maxFeePerGas"] = int(
-                        self.gas_price["maxFeePerGas"] * 2
-                    )
-                    self.gas_price["maxPriorityFeePerGas"] = int(
-                        self.gas_price["maxPriorityFeePerGas"] * 2
-                    )
+                    self.gas_price["maxFeePerGas"] = int(self.gas_price["maxFeePerGas"] * 1.1)
+                    self.gas_price["maxPriorityFeePerGas"] = int(self.gas_price["maxPriorityFeePerGas"] * 1.1)
                     tx["maxFeePerGas"] = self.gas_price["maxFeePerGas"]
                     tx["maxPriorityFeePerGas"] = self.gas_price["maxPriorityFeePerGas"]
                 else:
-                    self.gas_price = int(self.gas_price * 2)
+                    self.gas_price = int(self.gas_price * 1.1)
                     tx["gasPrice"] = self.gas_price
+                return self.increase_gas_price(tx, 1.1, "Mempool full")
                 return tx, True
 
         else:
             if isinstance(self.gas_price, dict):
-                self.gas_price["maxFeePerGas"] = int(
-                    self.gas_price["maxFeePerGas"] * 1.5
-                )
-                self.gas_price["maxPriorityFeePerGas"] = int(
-                    self.gas_price["maxPriorityFeePerGas"] * 1.5
-                )
+                self.gas_price["maxFeePerGas"] = int(self.gas_price["maxFeePerGas"] * 1.1)
+                self.gas_price["maxPriorityFeePerGas"] = int(self.gas_price["maxPriorityFeePerGas"] * 1.1)
 
                 tx["maxFeePerGas"] = self.gas_price["maxFeePerGas"]
                 tx["maxPriorityFeePerGas"] = self.gas_price["maxPriorityFeePerGas"]
 
-                new_max_fee_gwei = self.web3.from_wei(
-                    self.gas_price["maxFeePerGas"], "gwei"
-                )
+                new_max_fee_gwei = self.web3.from_wei(self.gas_price["maxFeePerGas"], "gwei")
                 print(f"🥶 Increased gas price for retry: {new_max_fee_gwei:.6f} Gwei")
             else:
-                self.gas_price = int(self.gas_price * 1.8)
+                self.gas_price = int(self.gas_price * 1.1)
                 tx["gasPrice"] = self.gas_price
                 new_gas_gwei = self.web3.from_wei(self.gas_price, "gwei")
                 print(f"🥶 Increased gas price for retry: {new_gas_gwei:.6f} Gwei")
 
             return tx, True
 
+    def increase_gas_price(self, tx, factor, reason):
+        max_allowed = self.web3.to_wei(CONFIG["GAS_MAX_GWEI"], "gwei")
+    
+        if isinstance(self.gas_price, dict):
+            new_max_fee = int(self.gas_price["maxFeePerGas"] * factor)
+            if new_max_fee > max_allowed:
+                new_max_fee = max_allowed
+            
+            self.gas_price["maxFeePerGas"] = new_max_fee
+            self.gas_price["maxPriorityFeePerGas"] = min(
+                int(self.gas_price["maxPriorityFeePerGas"] * factor),
+                self.web3.to_wei(CONFIG["MAX_PRIORITY_GWEI"], "gwei"))
+        
+            tx["maxFeePerGas"] = self.gas_price["maxFeePerGas"]
+            tx["maxPriorityFeePerGas"] = self.gas_price["maxPriorityFeePerGas"]
+        
+            new_max_fee_gwei = self.web3.from_wei(self.gas_price["maxFeePerGas"], "gwei")
+            print(f"⚠️ {reason}. Boosting to {new_max_fee_gwei:.2f} Gwei")
+        else:
+            new_gas_price = int(self.gas_price * factor)
+            if new_gas_price > max_allowed:
+                new_gas_price = max_allowed
+            
+            self.gas_price = new_gas_price
+            tx["gasPrice"] = self.gas_price
+        
+            new_gas_gwei = self.web3.from_wei(self.gas_price, "gwei")
+            print(f"⚠️ {reason}. Boosting to {new_gas_gwei:.2f} Gwei")
+        
+        return tx, True
+    
     def send_transaction(self, tx, private_key):
         global tx_counter
         retries = CONFIG["MAX_RETRIES"]
+        consecutive_failures = 0
 
         while retries > 0:
             try:
@@ -518,49 +545,50 @@ class VoteScheduler:
                 receipt = self.web3.eth.send_raw_transaction(signed.rawTransaction)
                 tx_counter += 1
                 tx_hash = receipt.hex()
-                print(
-                    f"6️⃣ Transaction sent {Fore.GREEN}Successfully{Style.RESET_ALL} with total TXiD {Fore.YELLOW}[{tx_counter}]{Style.RESET_ALL} -> {Fore.GREEN}TxID Hash:{Style.RESET_ALL} {tx_hash}"
-                )
+                print(f"6️⃣ Transaction sent {Fore.GREEN}Successfully{Style.RESET_ALL} with total TXiD {Fore.YELLOW}[{tx_counter}]{Style.RESET_ALL} -> {Fore.GREEN}TxID Hash:{Style.RESET_ALL} {tx_hash}")
 
                 print(f"⌛ Waiting for transaction to onchain...")
                 try:
                     tx_receipt = self.web3.eth.wait_for_transaction_receipt(
-                        receipt, timeout=180
-                    )
+                        receipt, timeout=250)
                     if tx_receipt.status == 1:
-                        print(
-                            f"{Fore.GREEN}😎 Transaction successfully onchain!{Style.RESET_ALL}"
-                        )
+                        print(f"{Fore.GREEN}😎 Transaction successfully onchain!{Style.RESET_ALL}")
                     else:
-                        print(
-                            f"{Fore.RED}🔞 Transaction failed on-chain! Check explorer for details.{Style.RESET_ALL}"
-                        )
+                        print(f"{Fore.RED}🔞 Transaction failed on-chain! Check explorer for details.{Style.RESET_ALL}")
                     return tx_receipt
                 except Exception as timeout_error:
-                    print(
-                        f"⏱️ Timeout waiting for transaction receipt: {str(timeout_error)}"
-                    )
+                    print(f"⏱️ Timeout waiting for transaction receipt: {str(timeout_error)}")
                     print(f"🆙 Transaction may still be pending. {Fore.GREEN}Check HashID{Fore.RESET}: {tx_hash}")
                     return None
 
             except Exception as e:
+                consecutive_failures += 1
+            
+                # Jika gagal 3x berturut-turut, reset gas price
+                if consecutive_failures >= 3:
+                    self.reset_gas_price()
+                    consecutive_failures = 0
+                
+                    # Update tx dengan gas price yang di-reset
+                    if "gasPrice" in tx:
+                        tx["gasPrice"] = self.gas_price
+                    elif "maxFeePerGas" in tx:
+                        tx["maxFeePerGas"] = self.gas_price["maxFeePerGas"]
+                        tx["maxPriorityFeePerGas"] = self.gas_price["maxPriorityFeePerGas"]
+                
                 updated_tx, should_retry = self.handle_tx_error(e, tx)
-
-                if not should_retry:
+                if not should_retry or updated_tx is None:
+                    print(f"❌ Error sending transaction: {str(e)}")
                     return None
 
                 tx = updated_tx
                 retries -= 1
-                print(
-                    f"Error sending transaction. Retries left: {retries}. Error: {str(e)}"
-                )
+                print(f"⚠️ Error sending transaction. Retries left: {retries}.")
 
-                if retries == 0:
-                    print(f"{Fore.RED}🔄 All retry attempts failed.{Style.RESET_ALL}")
-                    return None
-
-                time.sleep(CONFIG["COOLDOWN"]["ERROR"])
-
+                if retries > 0:
+                    delay = random.randint(CONFIG["COOLDOWN"]["ERROR"][0], CONFIG["COOLDOWN"]["ERROR"][1])
+                    sleep_seconds(delay, "Waiting before retry")
+        
         return None
 
     def execute_vote(self, account, is_last_wallet=False):
@@ -568,17 +596,45 @@ class VoteScheduler:
             private_key = account["key"]
             sender = account["address"]
 
-            initial_balance = self.get_wallet_balance(sender)
+            # Check RPC status first and switch if needed
+            if not self.web3.is_connected():
+                print(f"🔄 RPC connection lost, attempting to switch...")
+                self.switch_rpc()
 
-            tx_data = self.build_transaction(sender)
+            # Get balance - handle RPC error
+            try:
+                initial_balance = self.get_wallet_balance(sender)
+            except Exception as e:
+                if "429" in str(e) or "too many requests" in str(e).lower():
+                    print(f"⚠️ RPC limiting requests, switching RPC...")
+                    if self.switch_rpc():
+                        # Try again after switch
+                        initial_balance = self.get_wallet_balance(sender)
+                    else:
+                        return False
+                else:
+                    raise  # Re-raise if it's a different error
+
+            # Build transaction - handle RPC error
+            try:
+                tx_data = self.build_transaction(sender)
+            except Exception as e:
+                if "429" in str(e) or "too many requests" in str(e).lower():
+                    print(f"⚠️ RPC limiting requests, switching RPC...")
+                    if self.switch_rpc():
+                        # Try again after switch
+                        tx_data = self.build_transaction(sender)
+                    else:
+                        return False
+                else:
+                    raise  # Re-raise if it's a different error
+
             if not tx_data:
                 return False
 
             receipt = self.send_transaction(tx_data, private_key)
             if not receipt:
-                print(
-                    f"{Fore.RED}🤏 Transaction failed or receipt not available.{Fore.RESET}"
-                )
+                print(f"{Fore.RED}🤏 Transaction failed or receipt not available.{Fore.RESET}")
                 return False
 
             if receipt.status != 1:
@@ -595,31 +651,21 @@ class VoteScheduler:
             gas_used = initial_balance - new_balance
             gas_cost_eth = self.web3.from_wei(gas_used, "ether")
 
-            print(
-                f"7️⃣  Checking last balance: {Fore.YELLOW}{new_balance_eth:.8f} {token_symbol}{Fore.RESET}"
-            )
-            print(
-                f"🤑 Final transaction cost: {Fore.YELLOW}{gas_cost_eth:.8f} {token_symbol}{Fore.RESET}"
-            )
+            print(f"7️⃣  Checking last balance: {Fore.YELLOW}{new_balance_eth:.8f} {token_symbol}{Fore.RESET}")
+            print(f"🤑 Final transaction cost: {Fore.YELLOW}{gas_cost_eth:.8f} {token_symbol}{Fore.RESET}")
 
             if is_last_wallet:
                 # Long delay after all wallets have been used
                 delay_seconds = random.randint(
-                    CONFIG["CYCLE_COMPLETE_DELAY"][0], CONFIG["CYCLE_COMPLETE_DELAY"][1]
-                )
-                print(
-                    f"{Fore.MAGENTA}8️⃣  All wallets used! cycle {self.cycle_count} was completed. Rotate long delay in {delay_seconds} seconds for next cycle{Style.RESET_ALL}"
-                )
+                    CONFIG["CYCLE_COMPLETE_DELAY"][0], CONFIG["CYCLE_COMPLETE_DELAY"][1])
+                print(f"{Fore.MAGENTA}8️⃣  All wallets used! cycle {self.cycle_count} was completed. Rotate long delay in {delay_seconds} seconds for next cycle{Style.RESET_ALL}")
                 sleep_seconds(delay_seconds, "Waiting for next cycle")
                 self.cycle_count += 1
             else:
                 # Short delay between wallets
                 delay_seconds = random.randint(
-                    CONFIG["WALLET_SWITCH_DELAY"][0], CONFIG["WALLET_SWITCH_DELAY"][1]
-                )
-                print(
-                    f"{Fore.GREEN}8️⃣ Switching to next wallet in {delay_seconds} seconds...{Style.RESET_ALL}"
-                )
+                    CONFIG["WALLET_SWITCH_DELAY"][0], CONFIG["WALLET_SWITCH_DELAY"][1])
+                print(f"{Fore.GREEN}8️⃣ Switching to next wallet in {delay_seconds} seconds...{Style.RESET_ALL}")
                 sleep_seconds(delay_seconds, "Switching to next wallet")
 
             return True
@@ -629,10 +675,18 @@ class VoteScheduler:
 
     def execute_cycle(self):
         """Execute one Vote transaction for each wallet in a cycle"""
-        print(
-            f"🔄 Starting vote transaction {Fore.YELLOW}CYCLE #{self.cycle_count}{Fore.RESET} with {Fore.GREEN}{len(self.accounts)} wallets{Fore.RESET}"
-        )
+        print(f"🔄 Starting vote transaction {Fore.YELLOW}CYCLE #{self.cycle_count}{Fore.RESET} with {Fore.GREEN}{len(self.accounts)} wallets{Fore.RESET}")
 
+        # Ensure RPC is connected or switch
+        if not self.web3.is_connected():
+            print(f"🔄 RPC connection lost before cycle, attempting to switch...")
+            if not self.switch_rpc():
+                print(f"❌ Failed to find working RPC. Waiting before retry...")
+                time.sleep(60)  # Wait a minute before trying the cycle again
+                if not self.switch_rpc():
+                    print(f"❌ Still no working RPC. Exiting cycle.")
+                    return False
+        
         self.update_gas_price()
 
         for idx, account in enumerate(self.accounts):
@@ -640,19 +694,13 @@ class VoteScheduler:
             is_last_wallet = idx == len(self.accounts) - 1
 
             address_short = short_address(account["address"])
-            print(
-                f"🏦 Using wallet {Fore.YELLOW}[{wallet_num}/{len(self.accounts)}]{Fore.RESET} -> {Fore.GREEN}{address_short}{Fore.RESET}"
-            )
+            print(f"🏦 Using wallet {Fore.YELLOW}[{wallet_num}/{len(self.accounts)}]{Fore.RESET} -> {Fore.GREEN}{address_short}{Fore.RESET}")
 
             success = self.execute_vote(account, is_last_wallet)
             if not success:
-                print(
-                    f"🥵 Failed to execute vote for wallet {Fore.YELLOW}[{wallet_num}]{Fore.RESET} Continuing to next wallet."
-                )
+                print(f"🥵 Failed to execute vote for wallet {Fore.YELLOW}[{wallet_num}]{Fore.RESET} Continuing to next wallet.")
 
-        print(
-            f"☑️ Vote cycle {Fore.YELLOW}#{self.cycle_count}{Fore.RESET} completed for all wallets."
-        )
+        print(f"☑️ Vote cycle {Fore.YELLOW}#{self.cycle_count}{Fore.RESET} completed for all wallets.")
         return True
 
 
@@ -673,9 +721,7 @@ def main():
             while True:
                 scheduler.execute_cycle()
         except KeyboardInterrupt:
-            print(
-                f"\n{Fore.YELLOW}Script interrupted by user. Exiting gracefully.{Fore.RESET}"
-            )
+            print(f"\n{Fore.YELLOW}Script interrupted by user. Exiting gracefully.{Fore.RESET}")
             return
 
     except Exception as e:
