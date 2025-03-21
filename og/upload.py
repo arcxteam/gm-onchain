@@ -437,20 +437,21 @@ class OGDataUploader:
         return True
     
     def decode_contract_error(self, error_str):
-        """Decode error message dari smart contract revert"""
+        """Decode error message dari smart contract revert dengan lebih detail"""
         # Pola umum error revert EVM
         revert_patterns = [
-            r"execution reverted: (.*?)$",
-            r"Error: VM Exception.*?: revert (.*?)$",
-            r"transact to.*?error: (.*?)$"
+            r"execution reverted: (.*?)($|,)",
+            r"Error: VM Exception.*?: revert (.*?)($|,)",
+            r"transact to.*?error: (.*?)($|,)",
+            r"Error: (.*?)($|,)"
         ]
-        
+    
         for pattern in revert_patterns:
             match = re.search(pattern, error_str)
             if match:
                 error_message = match.group(1)
                 logger.error(f"Smart Contract Error: {error_message}")
-                
+            
                 # Handle error-specific cases
                 if "Invalid merkle root" in error_message:
                     return "INVALID_MERKLE_ROOT"
@@ -458,9 +459,27 @@ class OGDataUploader:
                     return "EXCEEDED_MAX_DEPTH"
                 elif "Invalid tags" in error_message:
                     return "INVALID_TAGS"
+                elif "mempool is full" in error_message:
+                    return "MEMPOOL_FULL"
+                elif "gas too low" in error_message or "out of gas" in error_message:
+                    return "OUT_OF_GAS"
+                elif "reverted" in error_message:
+                    return "CONTRACT_REVERTED"
                 else:
                     return "CONTRACT_ERROR"
-        
+                
+        # Handling specific error patterns
+        if "transaction underpriced" in error_str.lower():
+            return "UNDERPRICED"
+        elif "nonce too low" in error_str.lower():
+            return "NONCE_TOO_LOW"
+        elif "insufficient funds" in error_str.lower():
+            return "INSUFFICIENT_FUNDS"
+        elif "already known" in error_str.lower():
+            return "TX_ALREADY_KNOWN"
+        elif "cannot estimate gas" in error_str.lower() or "gas required exceeds allowance" in error_str.lower():
+            return "GAS_ESTIMATION_FAILED"
+    
         return "UNKNOWN_ERROR"
 
     def calculate_correct_merkle_height(self, num_leaves):
@@ -522,6 +541,54 @@ class OGDataUploader:
             
             return self.prepare_optimized_submission(first_chunk)
 
+    def prepare_optimized_submission(self, file_path):
+        """Prepare optimized submission for more reliable uploads"""
+        try:
+            logger.info(f"Preparing optimized submission for {file_path}")
+        
+            with open(file_path, 'rb') as f:
+                data_bytes = f.read()
+        
+            file_size_kb = len(data_bytes) / 1024
+            logger.info(f"File Size: {file_size_kb:.2f} KB")
+        
+            # Simplify approach - use single node for better reliability
+            file_hash = self.w3.keccak(data_bytes)
+            root_hash_hex = file_hash.hex()
+        
+            # Use height 0 to simplify processing
+            submission_nodes = [{
+                "root": file_hash,
+                "height": 0
+            }]
+        
+            # Keep length as bytes count
+            length = len(data_bytes)
+        
+            # Prepare submission
+            submission = {
+                "length": length,
+                "tags": "0x",  # Empty tags for turbo mode
+                "nodes": submission_nodes,
+                "file_path": file_path,
+                "network": "turbo",
+                "root_hash": root_hash_hex,
+                "file_size_kb": file_size_kb
+            }
+        
+            logger.info(f"Optimized submission prepared: length={length}, root={root_hash_hex[:10]}...")
+        
+            # Validate before returning
+            if self.validate_submission_against_contract(submission) and self.validate_merkle_tree_structure(submission):
+                return submission
+            else:
+                logger.error("Optimized submission failed validation")
+                return None
+            
+        except Exception as e:
+            logger.error(f"Error preparing optimized submission: {e}")
+            return None
+    
     def split_file_into_chunks(self, file_path):
         """Split large file into smaller chunks for more reliable uploads"""
         CHUNK_SIZE = 5 * 1024  # 5KB chunks
@@ -549,31 +616,60 @@ class OGDataUploader:
 
     def get_optimal_nonce_strategy(self, address):
         """Implement more sophisticated nonce management"""
-        # 1. Check for pending transactions
-        try:
-            # Get latest confirmed nonce
-            latest_nonce = self.w3.eth.get_transaction_count(address, 'latest')
+        max_attempts = 3
+    
+        for attempt in range(max_attempts):
+            try:
+                # Get latest confirmed nonce
+                latest_nonce = self.w3.eth.get_transaction_count(address, 'latest')
             
-            # Get pending nonce
-            pending_nonce = self.w3.eth.get_transaction_count(address, 'pending')
+                # Get pending nonce
+                pending_nonce = self.w3.eth.get_transaction_count(address, 'pending')
             
-            # Check for gap between latest and pending
-            nonce_gap = pending_nonce - latest_nonce
+                # Check for gap between latest and pending
+                nonce_gap = pending_nonce - latest_nonce
             
-            if nonce_gap > 5:
-                logger.warning(f"Large nonce gap detected: {nonce_gap} pending transactions")
+                if nonce_gap > 5:
+                    logger.warning(f"Large nonce gap detected: {nonce_gap} pending transactions")
                 
-                # Option 1: Handle stuck transactions by replacing them
-                self.check_and_replace_stuck_transactions(address, latest_nonce, pending_nonce)
+                    # Check if latest nonce is much lower than expected
+                    if attempt == 0 and nonce_gap > 10:
+                        logger.warning("Unusually large nonce gap. Trying to refresh connection...")
+                        if self.retry_with_new_rpc():
+                            logger.info("Connection refreshed, rechecking nonce")
+                            continue
                 
-                return latest_nonce + 1
+                    # Option 1: Use conservative approach with latest nonce
+                    logger.info(f"Using conservative nonce approach: {latest_nonce}")
+                    return latest_nonce
             
-            logger.info(f"Using nonce {pending_nonce} (latest: {latest_nonce}, pending: {pending_nonce-latest_nonce})")
-            return pending_nonce
+                logger.info(f"Using nonce {pending_nonce} (latest: {latest_nonce}, pending: {nonce_gap})")
+                return pending_nonce
         
-        except Exception as e:
-            logger.error(f"Error determining nonce: {e}")
-            return self.w3.eth.get_transaction_count(address)
+            except Exception as e:
+                logger.error(f"Error determining nonce (attempt {attempt+1}/{max_attempts}): {e}")
+            
+                if attempt < max_attempts - 1:
+                    # Try switching RPC before next attempt
+                    if self.retry_with_new_rpc():
+                        logger.info("Switched RPC, retrying nonce determination")
+                        time.sleep(5)
+                    else:
+                        logger.warning("Could not switch RPC, retrying nonce determination anyway")
+                        time.sleep(8)
+                else:
+                    # Last resort: just get transaction count with default parameters
+                    try:
+                        safe_nonce = self.w3.eth.get_transaction_count(address)
+                        logger.info(f"Using safe fallback nonce: {safe_nonce}")
+                        return safe_nonce
+                    except Exception as fallback_err:
+                        logger.error(f"Even fallback nonce determination failed: {fallback_err}")
+                        # Absolute last resort
+                        return 0  # Caller will likely get a nonce error but at least we tried
+    
+        # Should not reach here but just in case
+        return self.w3.eth.get_transaction_count(address)
 
     def check_and_replace_stuck_transactions(self, address, latest_nonce, pending_nonce):
         """Check for stuck transactions and try to replace them"""
@@ -675,6 +771,65 @@ class OGDataUploader:
         ))
         self.gas_monitor_thread.daemon = True
         self.gas_monitor_thread.start()
+    
+    def check_and_handle_stuck_transaction(self, tx_hash, wait_time):
+        """Checks if a transaction is stuck and tries to handle it"""
+        try:
+            # Only check if we've waited a significant time
+            if wait_time < 90:
+                return False
+        
+            logger.warning(f"Transaction {tx_hash.hex()} potentially stuck after {wait_time} seconds")
+        
+            # Check if tx is in mempool
+            tx = self.w3.eth.get_transaction(tx_hash)
+            if not tx:
+                logger.warning("Transaction not found in node - may have been dropped")
+                return True  # Consider it stuck if not found
+            
+            # Check if mined but not confirmed
+            if tx.get('blockNumber') is not None:
+                logger.info(f"Transaction is mined in block {tx.get('blockNumber')} but awaiting confirmations")
+                return False  # Not stuck, just waiting for confirmations
+            
+            # It's in mempool but not mined - check how long it's been there
+            if wait_time > 180:  # 3 minutes
+                logger.warning("Transaction stuck in mempool for too long")
+            
+                # Try to speed it up with replacement tx
+                try:
+                    # Create a replacement with higher gas price (must use same nonce)
+                    nonce = tx.get('nonce')
+                
+                    logger.info(f"Attempting to replace stuck transaction. Original nonce: {nonce}")
+                
+                    replacement_tx = {
+                        'from': tx.get('from'),
+                        'to': tx.get('to'),
+                        'value': tx.get('value'),
+                        'gas': tx.get('gas'),
+                        'gasPrice': int(tx.get('gasPrice') * 1.5),  # 50% more gas price
+                        'nonce': nonce,
+                        'chainId': tx.get('chainId'),
+                        'data': tx.get('input')
+                    }
+                
+                    signed_tx = self.account.sign_transaction(replacement_tx)
+                    replacement_hash = self.w3.eth.send_raw_transaction(signed_tx.rawTransaction)
+                
+                    logger.info(f"Sent replacement transaction: {replacement_hash.hex()}")
+                    return True  # Considered resolved since we're now tracking a new tx
+                
+                except Exception as e:
+                    logger.error(f"Failed to replace stuck transaction: {e}")
+                    # If replacement fails, suggest we should retry
+                    return True
+                
+            return False  # Not considered stuck yet
+        
+        except Exception as e:
+            logger.error(f"Error checking stuck transaction: {e}")
+            return False  # Assume not stuck on error
     
     def optimize_data_for_blockchain(self, data_dict):
         """Optimize data structure for blockchain storage to minimize gas"""
@@ -788,34 +943,99 @@ class OGDataUploader:
         """Validate submission meets contract requirements"""
         if not hasattr(self, 'contract_constants'):
             self.analyze_0g_contract_requirements()
-        
+    
         # Check specific contract requirements
         errors = []
-        
+    
         # 1. Check length - must be positive
         if submission["length"] <= 0:
             errors.append("Data length must be positive")
-        
+    
         # 2. Check nodes
         if not submission["nodes"]:
             errors.append("Submission must have at least one node")
-        
+    
         for i, node in enumerate(submission["nodes"]):
             if node["height"] >= self.contract_constants.get("MAX_DEPTH", self.MAX_DEPTH):
                 errors.append(f"Node {i} height {node['height']} exceeds MAX_DEPTH {self.contract_constants.get('MAX_DEPTH', self.MAX_DEPTH)}")
                 # Auto-fix
                 node["height"] = self.contract_constants.get("MAX_DEPTH", self.MAX_DEPTH) - 1
+                logger.info(f"Auto-adjusted node {i} height to {node['height']}")
         
+            # Make sure all root values are exactly 32 bytes
+            if not isinstance(node["root"], bytes) or len(node["root"]) != 32:
+                errors.append(f"Node {i} root must be bytes32, not {type(node['root'])} with length {len(node['root']) if isinstance(node['root'], bytes) else 'N/A'}")
+                # Try to fix if possible
+                if isinstance(node["root"], bytes) and len(node["root"]) > 32:
+                    node["root"] = node["root"][:32]
+                    logger.info(f"Truncated node {i} root to 32 bytes")
+                elif isinstance(node["root"], bytes) and len(node["root"]) < 32:
+                    node["root"] = node["root"].ljust(32, b'\0')
+                    logger.info(f"Padded node {i} root to 32 bytes")
+    
         # 3. Check tags
         if self.contract_constants.get("TAGS_REQUIRED", False) and not submission["tags"]:
             errors.append("Tags are required for this network type")
-        
+            # Add default tag
+            submission["tags"] = "0x00"
+            logger.info("Added default tag 0x00")
+    
+        # 4. Check length against file size
+        if "file_size_kb" in submission:
+            expected_length = int(submission["file_size_kb"] * 1024)
+            if submission["length"] > expected_length * 1.1 or submission["length"] < expected_length * 0.9:
+                errors.append(f"Length {submission['length']} significantly differs from expected file size {expected_length}")
+                # Auto-fix
+                submission["length"] = expected_length
+                logger.info(f"Auto-adjusted length to match file size: {expected_length}")
+    
+        # Log errors but allow some non-critical issues
         if errors:
-            logger.warning(f"Submission validation issues: {'; '.join(errors)}")
-            return False
-        
+            critical_errors = [e for e in errors if "must be" in e or "required" in e]
+            if critical_errors:
+                logger.error(f"Critical submission validation issues: {'; '.join(critical_errors)}")
+                return False
+            else:
+                logger.warning(f"Non-critical submission issues were auto-fixed: {'; '.join(errors)}")
+    
         return True
 
+    def validate_merkle_tree_structure(self, submission):
+        """Validates merkle tree structure to ensure compatibility with contract"""
+        if not submission["nodes"]:
+            logger.error("No merkle nodes in submission")
+            return False
+    
+        # For simple submissions with single node
+        if len(submission["nodes"]) == 1:
+            node = submission["nodes"][0]
+            if node["height"] != 0:
+                logger.warning(f"Single node should have height 0, found {node['height']}. Auto-fixing...")
+                node["height"] = 0
+    
+        # For multi-node merkle trees, validate structure
+        elif len(submission["nodes"]) > 1:
+            # Sort nodes by height (should be ascending)
+            nodes = sorted(submission["nodes"], key=lambda n: n["height"])
+        
+            # Check each height appears exactly once
+            heights = [n["height"] for n in nodes]
+            if len(heights) != len(set(heights)):
+                logger.error("Duplicate heights in merkle tree")
+                return False
+        
+            # Check heights are consecutive
+            if heights != list(range(min(heights), max(heights) + 1)):
+                logger.warning("Non-consecutive heights in merkle tree")
+            
+                # Try to fix by reassigning heights
+                for i, node in enumerate(submission["nodes"]):
+                    node["height"] = i
+                logger.info("Auto-fixed merkle tree heights to be consecutive")
+    
+        logger.info("Merkle tree structure validated successfully")
+        return True
+    
     def simplify_crypto_data(self, data):
         """Simplify cryptocurrency data to reduce size"""
         if not data or 'cryptocurrencies' not in data:
@@ -906,19 +1126,24 @@ class OGDataUploader:
         max_retries = 5
         current_retry = 0
         last_error = None
-    
+
         logger.info(f"{Fore.YELLOW} Step 2: Preparing Registration Transaction{Fore.RESET}")
-    
+
         # Get network from submission
         network = submission.get("network", "turbo")
 
+        # Tambahkan delay awal untuk memastikan node blockchain stabil
+        initial_delay = random.randint(8, 18)
+        logger.info(f"Adding initial delay of {initial_delay} seconds before transaction...")
+        time.sleep(initial_delay)
+
         if hasattr(self, 'last_tx_attempt') and (datetime.now() - self.last_tx_attempt).total_seconds() < 60:
-            delay = random.randint(8, 21)
+            delay = random.randint(15, 30)  # Increased from 8-21 to 15-30
             logger.info(f"Adding {delay} seconds delay before transaction...")
             time.sleep(delay)
-    
+
         self.last_tx_attempt = datetime.now()
-    
+
         # Analyze file size to warn about potential gas issues
         file_size_bytes = 0
         if 'file_path' in submission and os.path.exists(submission['file_path']):
@@ -929,74 +1154,90 @@ class OGDataUploader:
             file_size_bytes = int(file_size_kb * 1024)
         else:
             file_size_kb = 0
-        
+    
         # Calculate storage endowment fee
         storage_fee_wei = self.calculate_storage_fee(file_size_bytes)
         storage_fee = self.w3.from_wei(storage_fee_wei, 'ether')
-    
+
         logger.info(f"File Size: {file_size_kb:.2f} KB")
         logger.info(f"Storage Endowment: {storage_fee:.8f} A0GI")
-    
+
         if file_size_kb > 200:
             logger.warning(f"Data file is {file_size_kb:.2f}KB which may require significant gas")
-        
+    
         while current_retry < max_retries:
             try:
                 # Get nonce with improved handling
                 nonce = self.get_optimal_nonce_strategy(self.account.address)
-            
-                # Gas price strategy
-                base_multiplier = 1.01
-                retry_increment = 0.11
+        
+                # Gas price strategy - increased base multiplier
+                base_multiplier = 1.05  # Increased from 1.01
+                retry_increment = 0.15  # Increased from 0.11
                 gas_price_multiplier = base_multiplier + (current_retry * retry_increment)
                 gas_price = int(self.w3.eth.gas_price * gas_price_multiplier)
-            
-                # Set minimum gas price
-                min_gas_price = self.w3.to_wei(3.5, 'gwei')
+        
+                # Set minimum gas price to 5 Gwei (increased from 3.5)
+                min_gas_price = self.w3.to_wei(5, 'gwei')
                 if gas_price < min_gas_price:
                     gas_price = min_gas_price
-            
+        
                 logger.info(f"Gas Price: {self.w3.from_wei(gas_price, 'gwei')} Gwei")
-            
+        
                 if isinstance(submission["tags"], str) and submission["tags"].startswith("0x"):
                     tags_bytes = bytes.fromhex(submission["tags"][2:])
                 else:
                     tags_bytes = b''
-            
+        
                 # Format parameter sesuai spesifikasi kontrak
                 contract_submission = [
                     submission["length"],
                     tags_bytes,
                     [[node["root"], node["height"]] for node in submission["nodes"]]  # [bytes32,uint256][]
                 ]
-            
+        
                 logger.info(f"Contract submission format: [uint256, bytes, [bytes32, uint256][]]")
                 logger.info(f"Parameters: length={contract_submission[0]}, tags={submission['tags']}, nodes_count={len(contract_submission[2])}")
-            
-                # Gas estimation
-                gas_limit = 160000
+        
+                # Gas estimation with better error handling
+                gas_limit = 200000  # Increased from 160000
                 try:
-                    # Estimate gas
-                    gas_estimate = self.contract.functions.submit(contract_submission).estimate_gas({
-                        'from': self.account.address,
-                        'nonce': nonce,
-                        'value': storage_fee_wei
-                    })
+                    # Estimate gas with retry
+                    gas_estimate = None
+                    for attempt in range(3):
+                        try:
+                            gas_estimate = self.contract.functions.submit(contract_submission).estimate_gas({
+                                'from': self.account.address,
+                                'nonce': nonce,
+                                'value': storage_fee_wei
+                            })
+                            break
+                        except Exception as e:
+                            if attempt < 2:
+                                logger.warning(f"Gas estimation attempt {attempt+1} failed: {e}. Retrying...")
+                                time.sleep(3)
+                            else:
+                                raise
                 
-                    gas_limit = int(gas_estimate * 1.1)  # 10% buffer
-                    logger.info(f"Estimated gas: {gas_estimate}, using {gas_limit} with buffer")
+                    if gas_estimate:
+                        gas_limit = int(gas_estimate * 1.15)  # Increased buffer from 10% to 15%
+                        logger.info(f"Estimated gas: {gas_estimate}, using {gas_limit} with buffer")
                 except Exception as e:
-                    gas_limit = 200000
+                    gas_limit = 300000  # Increased from 200000
                     logger.warning(f"Gas estimation failed: {e}. Using default: {gas_limit}")
-            
+        
                 # Calculate gas fee
                 gas_fee = gas_limit * gas_price
                 gas_fee_a0gi = self.w3.from_wei(gas_fee, 'ether')
                 logger.info(f"Gas Fee: {gas_fee_a0gi:.18f} A0GI")
-            
+        
                 # Total fee
                 total_fee = self.w3.from_wei(gas_fee + storage_fee_wei, 'ether')
                 logger.info(f"Total Fee: {total_fee:.18f} A0GI")
+
+                # Add a pre-transaction delay to ensure blockchain stability
+                pre_tx_delay = 5
+                logger.info(f"Waiting {pre_tx_delay} seconds before sending transaction...")
+                time.sleep(pre_tx_delay)
 
                 tx = self.contract.functions.submit(contract_submission).build_transaction({
                     'from': self.account.address,
@@ -1006,39 +1247,117 @@ class OGDataUploader:
                     'chainId': self.config["chain_id"],
                     'value': storage_fee_wei
                 })
-            
+        
                 # Sign and send transaction
                 logger.info(f"Signing transaction...")
                 signed_tx = self.account.sign_transaction(tx)
+            
+                # Add delay after signing for better transaction propagation
+                time.sleep(21)
+            
                 tx_hash = self.w3.eth.send_raw_transaction(signed_tx.rawTransaction)
                 tx_hash_hex = tx_hash.hex()
-            
+        
                 logger.info(f"Transaction sent: {tx_hash_hex}")
                 logger.info(f"{Fore.MAGENTA} ✓ Registration transaction submitted successfully{Fore.RESET}")
-            
+        
                 logger.info(f"{Fore.YELLOW} Step 3: Waiting for checking file metadata...{Fore.RESET}")
-            
+        
                 receipt = None
                 wait_time = 0
-                max_wait = 180
-                check_interval = 5
+                max_wait = 300  # Increased from 180 to 300 seconds
+                # Use adaptive check interval that increases over time
+                base_check_interval = 15  # Start with 10 seconds
             
+                # Track transaction status details
+                tx_details = {"pending": True, "mined": False, "status": None}
+        
                 while receipt is None and wait_time < max_wait:
                     try:
+                        # Get pending transaction first
+                        if wait_time % 30 == 0:  # Log periodically
+                            try:
+                                pending_tx = self.w3.eth.get_transaction(tx_hash)
+                                if pending_tx:
+                                    block_num = pending_tx.get('blockNumber')
+                                    if block_num is None:
+                                        logger.info(f"Transaction still in mempool after {wait_time}s")
+                                    else:
+                                        logger.info(f"Transaction mined in block {block_num}, waiting for confirmations...")
+                                        tx_details["mined"] = True
+                            except Exception as tx_err:
+                                logger.warning(f"Error checking transaction status: {tx_err}")
+                    
                         receipt = self.w3.eth.get_transaction_receipt(tx_hash)
+                    
                         if receipt is None:
+                            # Adjust check interval based on wait time
+                            check_interval = min(base_check_interval + (wait_time // 30) * 5, 30)
                             logger.info(f"Waiting for transaction confirmation... ({wait_time}s / {max_wait}s)")
                             time.sleep(check_interval)
                             wait_time += check_interval
                         else:
+                            # Successfully got receipt
+                            logger.info(f"Got transaction receipt after {wait_time}s")
+                            tx_details["pending"] = False
+                            tx_details["status"] = receipt.get('status')
                             break
                     except Exception as e:
-                        if "not found" in str(e).lower() and wait_time > 90:
-                            logger.warning(f"Transaction may have been dropped after {wait_time} seconds")
-                            break
+                        if "not found" in str(e).lower():
+                            if wait_time < 30:
+                                logger.info(f"Transaction not found yet, waiting for propagation... ({wait_time}s)")
+                            elif wait_time > 150 and not tx_details["mined"]:
+                                logger.warning(f"Transaction may have been dropped after {wait_time} seconds")
+                            
+                                # Check if transaction was replaced or mined under a different hash
+                                try:
+                                    # Check transactions for our account in recent blocks
+                                    latest_block = self.w3.eth.block_number
+                                    start_block = max(0, latest_block - 10)
+                                
+                                    logger.info(f"Checking recent blocks ({start_block}-{latest_block}) for our transaction...")
+                                    for block_num in range(start_block, latest_block + 1):
+                                        block = self.w3.eth.get_block(block_num, full_transactions=True)
+                                        for tx in block.transactions:
+                                            if tx.get('from', '').lower() == self.account.address.lower():
+                                                logger.info(f"Found transaction from our account in block {block_num}: {tx.hash.hex()}")
+                                except Exception as block_err:
+                                    logger.warning(f"Error checking recent blocks: {block_err}")
+                                
+                                # If we're past 150 seconds with no mined tx, we break to retry
+                                if wait_time > 150:
+                                    if self.check_and_handle_stuck_transaction(tx_hash, wait_time):
+                                    # Transaction was stuck, break the loop to retry
+                                        logger.warning("Transaction not found after extended period, breaking to retry")
+                                        break
                     
+                        check_interval = min(base_check_interval + (wait_time // 30) * 5, 20)
                         time.sleep(check_interval)
                         wait_time += check_interval
+            
+                # Additional waiting if receipt shows the transaction is mined but needs confirmations
+                if receipt and receipt.get('blockNumber'):
+                    confirmation_wait = 0
+                    max_confirmation_wait = 60
+                
+                    while confirmation_wait < max_confirmation_wait:
+                        try:
+                            # Get current block number
+                            current_block = self.w3.eth.block_number
+                            tx_block = receipt.get('blockNumber')
+                            confirmations = current_block - tx_block + 1
+                        
+                            if confirmations >= 2:  # Wait for at least 2 confirmations
+                                logger.info(f"Transaction confirmed with {confirmations} confirmations")
+                                break
+                            else:
+                                logger.info(f"Waiting for confirmations... (Current: {confirmations}, Block: {current_block}, Tx Block: {tx_block})")
+                                time.sleep(14)
+                                confirmation_wait += 10
+                        except Exception as conf_err:
+                            logger.warning(f"Error checking confirmations: {conf_err}")
+                            time.sleep(10)
+                            confirmation_wait += 10
             
                 if receipt:
                     # Check if transaction was successful
@@ -1046,7 +1365,7 @@ class OGDataUploader:
                         block_number = receipt.get('blockNumber')
                         gas_used = receipt.get('gasUsed')
                         actual_gas_fee = self.w3.from_wei(gas_used * gas_price, 'ether')
-                    
+                
                         logger.info(f"Upload complete! Transaction successful in block #{block_number}")
                         logger.info(f"Gas used: {gas_used} ({(gas_used/gas_limit)*100:.1f}% of limit)")
                         logger.info(f"Actual gas fee: {actual_gas_fee:.18f} A0GI")
@@ -1054,56 +1373,89 @@ class OGDataUploader:
                         logger.info(f"Total fee paid: {actual_gas_fee + storage_fee:.12f} A0GI")
                         logger.info(f"Root hash: {submission.get('root_hash')}")
                         logger.info(f"{Fore.MAGENTA}✓ Data successfully uploaded and registered on-chain!{Fore.RESET}")
-                    
+                
                         # Clean up file if needed
                         if 'file_path' in submission and os.path.exists(submission['file_path']):
                             logger.info(f"Removing uploaded file to save space")
                             os.remove(submission['file_path'])
-                    
+                
                         return receipt
                     else:
-                        # Transaction failed
+                        # Transaction failed - gather detailed info for debugging
+                        tx_block = receipt.get('blockNumber')
+                        gas_used = receipt.get('gasUsed')
                         logger.error(f"{Fore.RED}✗ Transaction failed on-chain. Status: {receipt.get('status')}{Fore.RESET}")
-                        logger.error(f"Gas used: {receipt.get('gasUsed')}")
+                        logger.error(f"Gas used: {gas_used} ({(gas_used/gas_limit)*100:.1f}% of limit)")
+                        logger.error(f"Block number: {tx_block}")
+                
+                        # Check for specific error conditions
+                        if gas_used >= gas_limit * 0.95:
+                            logger.warning("Transaction likely failed due to out of gas. Will increase gas limit next time.")
+                        elif gas_used < gas_limit * 0.5:
+                            logger.warning("Transaction used less than half of gas limit, likely reverted by contract.")
+                        
+                            # Try to get transaction trace or error reason if available
+                            try:
+                                # Some RPCs support eth_call for reverted transactions
+                                self.w3.eth.call(tx, block_identifier=tx_block)
+                            except Exception as call_err:
+                                error_msg = str(call_err)
+                                logger.error(f"Transaction reverted with: {error_msg}")
+                            
+                                if "execution reverted" in error_msg.lower():
+                                    if "mempool is full" in error_msg.lower():
+                                        logger.warning("Contract rejected due to mempool being full. Waiting before retry...")
+                                        time.sleep(random.randint(45, 90))
+                                    elif "invalid merkle" in error_msg.lower():
+                                        logger.error("Contract rejected due to invalid Merkle tree structure.")
+                                        # Adjust the merkle tree parameters for next attempt
+                                        if current_retry < max_retries - 1:
+                                            logger.info("Adjusting Merkle tree for next attempt...")
+                                            for node in submission["nodes"]:
+                                                # Adjust height if needed
+                                                if node["height"] > 0:
+                                                    node["height"] -= 1
                     
-                        # Decode error if possible
-                        error_type = "UNKNOWN_ERROR"
-                        if receipt.get('logs'):
-                            for log in receipt.get('logs'):
-                                logger.info(f"Transaction log: {log}")
-                    
-                        # If out of gas, adjust for next attempt
-                        if receipt.get('gasUsed') >= gas_limit * 0.95:
-                            logger.warning("Likely ran out of gas. Will increase gas limit for next attempt.")
+                        # Add extra delay after failure before retrying
+                        post_failure_delay = random.randint(15, 30)
+                        logger.info(f"Waiting {post_failure_delay} seconds after transaction failure before retry...")
+                        time.sleep(post_failure_delay)
                 else:
                     logger.warning(f"Transaction not confirmed after {max_wait} seconds.")
                 
-                    # Check transaction status
+                    # Try to get a better understanding of transaction status
                     try:
-                        tx_status = self.w3.eth.get_transaction(tx_hash)
-                        if tx_status and tx_status.get('blockNumber') is None:
-                            logger.info("Transaction is still pending in mempool")
+                        pending_tx = self.w3.eth.get_transaction(tx_hash)
+                        if pending_tx:
+                            block_num = pending_tx.get('blockNumber')
+                            if block_num is None:
+                                logger.warning("Transaction still in mempool but not mined after extended period.")
+                            else:
+                                logger.warning(f"Transaction mined in block {block_num} but receipt unavailable.")
                         else:
-                            logger.warning("Transaction status unclear")
-                    except Exception as e:
-                        logger.warning(f"Error checking transaction status: {str(e)}")
+                            logger.warning("Transaction not found in node.")
+                    except Exception as tx_err:
+                        logger.warning(f"Error getting transaction details: {tx_err}")
                 
+                    # Ensure delay between retries (use different RPC or wait)
                     if not self.retry_with_new_rpc():
-                        time.sleep(random.randint(10, 30))
-        
+                        logger.info("Could not switch RPC, waiting before next attempt...")
+                        time.sleep(random.randint(30, 60))
+    
             except Exception as e:
                 last_error = e
                 error_str = str(e)
                 logger.error(f"✗ Error submitting data (attempt {current_retry+1}/{max_retries}): {error_str}")
-            
+        
                 # Special handling for common errors
                 if "mempool is full" in error_str.lower():
-                    delay = random.randint(60, 120)  # Longer delay (1-2 minutes)
+                    delay = random.randint(90, 180)  # Significantly increased delay for mempool full errors
                     logger.warning(f"Mempool is full, waiting {delay} seconds...")
                     time.sleep(delay)
-                
+            
                     if not self.retry_with_new_rpc():
-                        logger.warning("Could not switch RPC, increasing gas price")
+                        logger.warning("Could not switch RPC, increasing gas price and waiting longer")
+                        time.sleep(random.randint(30, 60))
                 elif "insufficient funds" in error_str.lower():
                     logger.error("Wallet has insufficient funds for this transaction")
                     if len(self.private_keys) > 1:
@@ -1114,21 +1466,32 @@ class OGDataUploader:
                         return None
                 elif "invalid nonce" in error_str.lower():
                     logger.warning("Nonce issue detected, will adjust in next attempt")
+                    # Force nonce refresh by getting latest confirmed nonce
+                    try:
+                        latest_nonce = self.w3.eth.get_transaction_count(self.account.address, 'latest')
+                        logger.info(f"Reset to latest confirmed nonce: {latest_nonce}")
+                    except Exception as nonce_err:
+                        logger.warning(f"Error refreshing nonce: {nonce_err}")
                 elif "underpriced" in error_str.lower():
                     logger.warning("Transaction underpriced, increasing gas price significantly")
+                    # Make sure next attempt uses at least 18% more gas price
+                    increase_factor = 1.18
+                    min_gas_price = self.w3.to_wei(self.w3.from_wei(gas_price, 'gwei') * increase_factor, 'gwei')
                 else:
                     if not self.retry_with_new_rpc():
-                        if current_retry > 1 and len(self.private_keys) > 1:
+                        if current_retry > 0 and len(self.private_keys) > 1:
                             logger.info("Trying with a different wallet...")
                             self.rotate_private_key()
-            
-                # Backoff delay
-                delay = min(2 ** current_retry * 5, 60)
+        
+                # Use exponential backoff strategy for retries with randomization
+                backoff_base = 15  # Increased base delay
+                max_backoff = 180  # Cap at 3 minutes
+                delay = min(backoff_base * (2 ** current_retry) + random.randint(0, 30), max_backoff)
                 logger.info(f"Waiting {delay} seconds before retry {current_retry+1}")
                 time.sleep(delay)
-        
-            current_retry += 1
     
+            current_retry += 1
+
         logger.error("✗ Failed to submit data after multiple attempts")
         return None
     
@@ -1140,34 +1503,33 @@ class OGDataUploader:
         """Prepare a simplified submission for small files exactly matching successful format"""
         try:
             logger.info(f"{Fore.YELLOW} Step 1: Upload File Prepared{Fore.RESET} data is {Fore.MAGENTA}{file_path} {Fore.RESET}")
-    
+
             with open(file_path, 'rb') as f:
                 data_bytes = f.read()
-        
+    
             file_size_kb = len(data_bytes) / 1024
             logger.info(f"File Size: {file_size_kb:.2f} KB")
-        
+    
             # Hash file dengan keccak256
             file_hash = self.build_simple_content_hash(data_bytes) if hasattr(self, 'build_simple_content_hash') else self.w3.keccak(data_bytes)
             root_hash_hex = file_hash.hex()
             logger.info(f"Root Hash is: {root_hash_hex}")
 
+            # PENTING: Untuk file kecil, atur height ke 0 untuk merkle tree sederhana
             submission_nodes = [{
                 "root": file_hash,
                 "height": 0
             }]
-        
-            # PENTING: Format parameter sesuai ABI kontrak
-            # Gunakan uint256 untuk length
+    
+            # PENTING: Pastikan length adalah jumlah bytes, bukan bits
             length = len(data_bytes)
+    
+            logger.info(f"Setting length to {length} (bytes)")
         
-            logger.info(f"Setting length to {length} (bytes) instead of {len(data_bytes) * 8} (bits)")
-            
             tags = "0x"
-        
+    
             # Persiapkan submission dalam format yang tepat
             if network.lower() == "turbo":
-                tags = "0x"
                 submission = {
                     "length": length,
                     "tags": tags,
@@ -1181,19 +1543,39 @@ class OGDataUploader:
             else:
                 source_tag = "0x" + os.path.basename(file_path).split('_')[0].encode().hex()
                 submission = {
-                    "length": length,  # Gunakan jumlah bytes, bukan bits
-                    "tags": source_tag,  # Format dalam hex string
+                    "length": length,
+                    "tags": source_tag,
                     "nodes": submission_nodes,
                     "file_path": file_path,
-                    "network": network
+                    "network": network,
+                    "root_hash": root_hash_hex,
+                    "file_size_kb": file_size_kb
                 }
                 logger.info(f"Prepared Standard format with tag: {source_tag}")
-        
+    
             logger.info(f"Submission details: length={submission['length']}, tags={submission['tags']}")
             logger.info(f"Node details: root-hash {submission['nodes'][0]['root'].hex()}, height={submission['nodes'][0]['height']}")
-        
-            return submission
-        
+    
+            # Validate submission
+            if self.validate_submission_against_contract(submission) and self.validate_merkle_tree_structure(submission):
+                logger.info("Submission successfully validated against contract requirements")
+                return submission
+            else:
+                logger.warning("Submission failed validation against contract requirements")
+                # Try to adjust parameters to meet contract requirements
+                logger.info("Attempting to adjust submission parameters...")
+            
+                # If validation failed, make conservative adjustments
+                submission["length"] = min(submission["length"], 4096)  # Limit size if too large
+            
+                # Try validation again
+                if self.validate_submission_against_contract(submission) and self.validate_merkle_tree_structure(submission):
+                    logger.info("Adjusted submission successfully validated")
+                    return submission
+                else:
+                    logger.error("Could not create valid submission after adjustments")
+                    return None
+    
         except Exception as e:
             logger.error(f"✗ Error preparing file upload: {str(e)}")
             logger.debug(traceback.format_exc())
@@ -1301,19 +1683,24 @@ class OGDataUploader:
         
                 # Determine submission approach based on file size
                 submission = self.implement_data_chunking_strategy(filepath)
-            
+
                 if submission:
                     # Validate submission against contract requirements
-                    if self.validate_submission_against_contract(submission):
+                    if self.validate_submission_against_contract(submission) and self.validate_merkle_tree_structure(submission):
                         logger.info("Submitting CoinGecko data to contract...")
                         receipt = self.submit_data_to_contract(submission)
+                    else:
+                        logger.warning("Submission validation failed, trying optimized submission")
+                        submission = self.prepare_optimized_submission(filepath)
+                        if submission:
+                            receipt = self.submit_data_to_contract(submission)
                     
                         if receipt:
                             logger.info(f"{Fore.GREEN}✅ CoinGecko data upload successful!{Style.RESET_ALL}")
                         else:
                             logger.error(f"{Fore.RED}❌ Failed to submit CoinGecko data to contract{Style.RESET_ALL}")
                     else:
-                        logger.warning("Submission validation failed, skipping upload")
+                        logger.warning("Submission validation failed, trying optimized submission")
                           
         except Exception as e:
             logger.error(f"Error in hourly update process: {str(e)}")
