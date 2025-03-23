@@ -3,10 +3,10 @@ import time
 import json
 import random
 import datetime
-from web3 import Web3 # type: ignore
+from web3 import Web3
 from pathlib import Path
-from colorama import Fore, Style, init # type: ignore
-from dotenv import load_dotenv # type: ignore
+from colorama import Fore, Style, init
+from dotenv import load_dotenv
 
 init(autoreset=True)
 load_dotenv()
@@ -15,7 +15,7 @@ load_dotenv()
 MESSAGES = {
     "GAS_RESET": "⚠️ Gas price di-reset ke nilai yang lebih wajar",
     "TX_SENT": "✅ Transaksi {} dikirim! TxID #{}: {}",
-    "TX_CONFIRMED": "✅ Transaksi dikonfirmasi: nomor blok #{}",
+    "TX_CONFIRMED": "✅ Transaksi dikonfirmasi: nomor blok #{}...",
     "TX_FAILED": "❌ Transaksi gagal di blockchain",
     "TX_BUILD_ERROR": "❌ Gagal membangun transaksi {}: {}",
     "RPC_ERROR": "⚠️ Error pada RPC: {}",
@@ -33,21 +33,21 @@ CONFIG = {
     "PRIVATE_KEY_FILE": os.path.join(os.path.dirname(__file__), "private_keys.txt"),
     "ENV_FILE": ".env",
     "MAX_RETRIES": 5,
-    "GAS_MULTIPLIER": 1.5,
-    "MAX_PRIORITY_GWEI": 2.5, # EIP-1559
-    "GAS_LIMIT": 280000,
+    "GAS_MULTIPLIER": 1.3,
+    "MAX_PRIORITY_GWEI": 2.5, # EIP1559
+    "GAS_LIMIT": 250000,
     "COOLDOWN": {"SUCCESS": (15, 120), "ERROR": (30, 180)}, # detik bang
-    "WALLET_SWITCH_DELAY": (120, 480), # detik
+    "WALLET_SWITCH_DELAY": (160, 580), # detik
     "CYCLE_COMPLETE_DELAY": (3600, 7200), # detik
-    "TRANSACTIONS_PER_WALLET": (3, 8), # tx per wallet random
-    "SWAP_AMOUNT_USDT": (1.5, 3.5), # swap saldo
+    "TRANSACTIONS_PER_WALLET": (3, 10), # tx per wallet random
+    "SWAP_AMOUNT_USDT": (5, 10), # swap saldo
     "SWAP_AMOUNT_ETH": (0.002, 0.005),
     "SWAP_AMOUNT_BTC": (0.0002, 0.0005),
-    "GAS_MIN_GWEI": 1.5,
+    "GAS_MIN_GWEI": 2.5,
     "GAS_MAX_GWEI": 20, # Legacy mode
     "GAS_RESET_GWEI": 5,
-    "RPC_TIMEOUT": 10,  # detik
-    "RPC_RETRY_DELAY": 5,  # detik
+    "RPC_TIMEOUT": 14,  # detik
+    "RPC_RETRY_DELAY": 10,  # detik
 }
 
 CHAIN_SYMBOLS = {16600: "A0GI"}
@@ -166,7 +166,7 @@ def validate_rpc_urls(urls):
     
     if not valid_urls:
         print_error("Tidak ada RPC URL valid ditemukan. Menggunakan default.")
-        return ["https://16600.rpc.thirdweb.com", "https://evmrpc-testnet.0g.ai"]
+        return ["https://evmrpc-testnet.0g.ai", "https://16600.rpc.thirdweb.com"]
     
     return valid_urls
     
@@ -225,7 +225,7 @@ class OGSwapper:
                 w3 = Web3(Web3.HTTPProvider(rpc_url.strip(), request_kwargs={'timeout': CONFIG["RPC_TIMEOUT"]}))
                 if w3.is_connected():
                     chain_id = w3.eth.chain_id
-                    print_success(f"🌐 Terhubung ke RPC: {rpc_url}")
+                    print(f"🌐 Terhubung ke RPC: {Fore.YELLOW}{rpc_url}{Fore.RESET}")
                     print_info(f"📡 Chain ID: {chain_id} - {CHAIN_SYMBOLS.get(chain_id, 'Unknown')}")
                     self.web3 = w3
                     self.rpc_last_error_time[rpc_url] = 0
@@ -260,13 +260,13 @@ class OGSwapper:
         # random RPC
         self.current_rpc_index, new_rpc = random.choice(available_rpcs)
         
-        print_warning(f"🔄 Beralih dari RPC {old_rpc} ke {new_rpc}")
+        print(f"🔄 Beralih dari RPC {Fore.RED}{old_rpc}{Fore.RESET} ke --> {Fore.YELLOW}{new_rpc}{Fore.RESET}")
         
         try:
             self.web3 = Web3(Web3.HTTPProvider(new_rpc.strip(), request_kwargs={'timeout': CONFIG["RPC_TIMEOUT"]}))
             if self.web3.is_connected():
                 self.initialize_contracts()
-                print_success(f"✅ Berhasil beralih ke RPC: {new_rpc}")
+                print(f"✅ Berhasil beralih ke RPC: {Fore.YELLOW}{new_rpc}{Fore.RESET}")
                 self.rpc_last_error_time[new_rpc] = 0
                 return True
         except Exception as e:
@@ -283,7 +283,7 @@ class OGSwapper:
         try:
             router_address = Web3.to_checksum_address(TOKEN_ADDRESSES["ROUTER"])
             self.router_contract = self.web3.eth.contract(address=router_address, abi=ROUTER_ABI)
-            print_success(f"📝 Kontrak router berhasil diinisialisasi: {short_address(router_address)}")
+            print(f"📝 Kontrak router berhasil diinisialisasi: {short_address(router_address)}")
             
             self.token_contracts = {}
         except Exception as e:
@@ -337,7 +337,7 @@ class OGSwapper:
                             if not any(acc["address"] == account.address for acc in accounts):
                                 accounts.append({"key": valid_key, "address": account.address})
                                 loaded += 1
-                                print_success(f"✅ Wallet #{loaded} berhasil dimuat: {short_address(account.address)}")
+                                print(f"✅ Wallet #{loaded} berhasil dimuat: {Fore.GREEN}{short_address(account.address)}{Fore.RESET}")
                         else:
                             print_warning("⚠️ Private key tidak valid, melewatkan...")
             except Exception as e:
@@ -348,7 +348,7 @@ class OGSwapper:
             exit(1)
 
         self.accounts = accounts
-        print_success(f"📊 Total {len(self.accounts)} wallet berhasil dimuat")
+        print(f"📊 Total {len(self.accounts)} wallet berhasil dimuat")
     
     def check_eip1559_support(self):
         """Periksa dukungan EIP-1559 pada jaringan"""
@@ -356,7 +356,7 @@ class OGSwapper:
             # Metode 1: cek baseFeePerGas pada blok terakhir
             latest_block = self.web3.eth.get_block('latest')
             if 'baseFeePerGas' in latest_block and latest_block['baseFeePerGas']:
-                print_success("✅ Jaringan mendukung EIP-1559 (metode 1)")
+                print("✅ Jaringan mendukung EIP-1559 (metode 1)")
                 return True
             
             # Metode 2: cek eriksa fee history
@@ -404,7 +404,7 @@ class OGSwapper:
             current = self.web3.eth.gas_price
 
             if current <= self.web3.to_wei(0.5, "gwei"):
-                print_warning(f"⚠️ Gas price terlalu rendah ({self.web3.from_wei(current, 'gwei'):.2f} Gwei), menggunakan default")
+                print(f"⚠️  Gas price terlalu rendah ({self.web3.from_wei(current, 'gwei'):.2f} Gwei), menggunakan default")
                 gas_price = self.web3.to_wei(CONFIG["GAS_MIN_GWEI"], "gwei")
             else:
                 min_gas = self.web3.to_wei(CONFIG["GAS_MIN_GWEI"], "gwei")
@@ -468,35 +468,50 @@ class OGSwapper:
 
     def check_wallet_balance(self, address, token_symbol=None):
         """Periksa saldo wallet, native token atau token tertentu"""
-        try:
-            balance_wei = self.web3.eth.get_balance(address)
-            balance_eth = self.web3.from_wei(balance_wei, "ether")
-            chain_id = self.web3.eth.chain_id
-            token_name = CHAIN_SYMBOLS.get(chain_id, "A0GI")
+        max_retries = 3
+        for retry in range(max_retries):
+            try:
+                balance_wei = self.web3.eth.get_balance(address)
+                balance_eth = self.web3.from_wei(balance_wei, "ether")
+                chain_id = self.web3.eth.chain_id
+                token_name = CHAIN_SYMBOLS.get(chain_id, "A0GI")
             
-            print_info(MESSAGES["BALANCE_CHECK"].format(token_name, balance_eth))
+                print_info(MESSAGES["BALANCE_CHECK"].format(token_name, balance_eth))
 
-            if token_symbol and token_symbol in TOKEN_ADDRESSES:
-                token_contract = self.get_token_contract(token_symbol)
-                token_balance = token_contract.functions.balanceOf(address).call()
-                token_decimals = self.token_decimals.get(token_symbol, 18)
-                token_amount = token_balance / (10 ** token_decimals)
-                print_info(MESSAGES["BALANCE_CHECK"].format(token_symbol, token_amount))
-                return balance_wei, token_balance
+                if token_symbol and token_symbol in TOKEN_ADDRESSES:
+                    token_contract = self.get_token_contract(token_symbol)
+                    token_balance = token_contract.functions.balanceOf(address).call()
+                    token_decimals = self.token_decimals.get(token_symbol, 18)
+                    token_amount = token_balance / (10 ** token_decimals)
+                    print_info(MESSAGES["BALANCE_CHECK"].format(token_symbol, token_amount))
+                    return balance_wei, token_balance
                 
-            return balance_wei
-        except Exception as e:
-            print_error(f"❌ Error memeriksa saldo: {str(e)}")
-            return 0
+                return balance_wei
+            except Exception as e:
+                error_msg = str(e).lower()
+                if "429" in error_msg or "too many requests" in error_msg:
+                    print_warning(f"⚠️ RPC membatasi permintaan saat memeriksa saldo. Mencoba beralih RPC...")
+                    if self.switch_rpc():
+                        # Berhasil switch RPC, coba lagi
+                        continue
+            
+                if retry == max_retries - 1:  # Jika ini percobaan terakhir
+                    print_error(f"❌ Error memeriksa saldo setelah {max_retries} percobaan: {str(e)}")
+                    return 0
+            
+                # Tunggu sebelum retry
+                sleep_seconds(10, "Menunggu sebelum mencoba memeriksa saldo lagi")
+    
+        return 0
 
     def estimate_gas(self, contract_func, sender):
         """Fungsi generik untuk estimasi gas dengan fallback ke default"""
         try:
             gas_estimate = contract_func.estimate_gas({'from': sender})
-            return int(gas_estimate * 1.2)  # 20% buffer
+            return int(gas_estimate * 1.05)  # 10% buffer
         except Exception as e:
             default_gas = CONFIG["GAS_LIMIT"]
-            print_warning(f"⚠️ Estimasi gas gagal: {str(e)}. Menggunakan nilai default: {default_gas}")
+            print(f"⚠️  Estimasi gas gagal: {Fore.RED}{str(e)}{Fore.RESET} Cek nilai default: {default_gas}")
             return default_gas
 
     def build_transaction(self, to_address, data, sender, gas_limit, description=""):
@@ -588,7 +603,7 @@ class OGSwapper:
             if tx:
                 decimals = self.token_decimals.get(token_in, 18)
                 amount_readable = amount / (10 ** decimals)
-                print_debug(f"📝 Transaksi swap {amount_readable:.6f} {token_in} ke {token_out} dibuat")
+                print_debug(f"📝 Transaksi swap {amount_readable:.6f} {token_in} </> {token_out} dibuat")
                 
             return tx
         except Exception as e:
@@ -606,20 +621,20 @@ class OGSwapper:
                 time.sleep(5)
                 return self.get_safe_nonce(address)
         
-            print_debug(f"🔢 Menggunakan nonce: {latest_nonce}")
+            print(f"🔢 Menggunakan {Fore.YELLOW}nonce {latest_nonce}{Fore.RESET}")
             return latest_nonce
         except Exception as e:
-            print_warning(f"⚠️ Error mendapatkan nonce: {str(e)}")
+            print(f"⚠️  Error mendapatkan nonce: {Fore.RED}{str(e)}{Fore.RESET}")
             return self.web3.eth.get_transaction_count(address, "latest")
 
     def wait_for_transaction_completion(self, tx_hash, timeout=210):
         """Menunggu transaksi selesai dengan penanganan error yang lebih baik"""
         print_info(MESSAGES["WAITING_TX"].format(tx_hash))
         start_time = time.time()
-        
+    
         last_error_time = 0  # Untuk menghindari spam log error
         rpc_switched = False # Track apakah sudah switch RPC
-        check_interval = 5   # Interval cek status transaksi detik
+        check_interval = 6   # Interval cek status transaksi detik
     
         while time.time() - start_time < timeout:
             try:
@@ -634,12 +649,12 @@ class OGSwapper:
             except Exception as e:
                 current_time = time.time()
                 error_msg = str(e).lower()
-                
+            
                 if current_time - last_error_time > 5:
                     if "not found" not in error_msg:
                         print_warning(f"⚠️ Error checking receipt: {str(e)}")
                         last_error_time = current_time
-                        
+                    
                         # Jika RPC error, coba switch
                         if "429" in error_msg or "too many requests" in error_msg or "server error" in error_msg:
                             if not rpc_switched:
@@ -812,8 +827,9 @@ class OGSwapper:
             print_warning("⚠️ maxFeePerGas nol terdeteksi, memperbaiki...")
             tx["maxFeePerGas"] = self.web3.to_wei(CONFIG["GAS_MIN_GWEI"], "gwei")
             tx["maxPriorityFeePerGas"] = self.web3.to_wei(0.5, "gwei")
-    
+
         consecutive_failures = 0
+        rpc_switch_attempts = 0  # Menghitung berapa kali mencoba switch RPC
 
         while retries > 0:
             try:
@@ -821,14 +837,15 @@ class OGSwapper:
                 signed = self.web3.eth.account.sign_transaction(tx, private_key)
                 receipt = self.web3.eth.send_raw_transaction(signed.rawTransaction)
                 tx_hash = receipt.hex()
-            
+        
                 consecutive_failures = 0
+                rpc_switch_attempts = 0  # Reset counter setelah berhasil
 
                 self.tx_counter += 1
                 print_success(MESSAGES["TX_SENT"].format(tx_type, self.tx_counter, tx_hash))
 
                 tx_receipt = self.wait_for_transaction_completion(tx_hash)
-            
+        
                 if tx_receipt:
                     if tx_receipt.status == 1:
                         print_success(f"✅ Transaksi berhasil dikonfirmasi!")
@@ -841,36 +858,45 @@ class OGSwapper:
                 else:
                     print_warning(f"⏱️ Timeout menunggu konfirmasi, tetapi transaksi mungkin berhasil. TxID: {tx_hash}")
                     return {'transactionHash': tx_hash}
-                    
+                
             except Exception as e:
+                error_msg = str(e).lower()
                 consecutive_failures += 1
+            
+                # Jika error terkait dengan RPC (429, dst), coba switch RPC langsung
+                if "429" in error_msg or "too many requests" in error_msg:
+                    if rpc_switch_attempts < 3:  # Batasi jumlah percobaan switch RPC
+                        print_warning(f"⚠️ RPC membatasi permintaan (429). Mencoba beralih RPC...")
+                        if self.switch_rpc():
+                            rpc_switch_attempts += 1
+                            continue  # Langsung coba lagi dengan RPC baru
             
                 # Jika gagal 3x berturut-turut, reset gas price
                 if consecutive_failures >= 3:
                     self.reset_gas_price()
                     consecutive_failures = 0
-                
+            
                     # Update tx dengan gas price yang di-reset
                     if "gasPrice" in tx:
                         tx["gasPrice"] = self.gas_price
                     elif "maxFeePerGas" in tx:
                         tx["maxFeePerGas"] = self.gas_price["maxFeePerGas"]
                         tx["maxPriorityFeePerGas"] = self.gas_price["maxPriorityFeePerGas"]
-                
+            
                 updated_tx, should_retry = self.handle_tx_error(e, tx)
-                if not should_retry:
+                if not should_retry or updated_tx is None:  # Tambahkan pengecekan is None
                     retries = 0
                     print_error(f"❌ Transaksi tidak dapat dikirim: {str(e)}")
                     return None
-            
+        
                 tx = updated_tx
                 retries -= 1
                 print_warning(f"⚠️ Error mengirim transaksi. Sisa percobaan: {retries}.")
-            
+        
                 if retries > 0:
                     delay = random.randint(CONFIG["COOLDOWN"]["ERROR"][0], CONFIG["COOLDOWN"]["ERROR"][1])
                     sleep_seconds(delay, "Menunggu sebelum retry")
-    
+
         return None
 
     def perform_token_approval(self, token_symbol, router_address, amount_in_wei, sender_address, private_key):
@@ -897,7 +923,7 @@ class OGSwapper:
                 return None
         
         # Delay untuk memastikan konfirmasi detik
-        sleep_seconds(random.randint(5, 15), "Memastikan konfirmasi approval")
+        sleep_seconds(random.randint(7, 21), "Memastikan konfirmasi approval")
         return approval_receipt
     
     def perform_token_swap(self, token_in, token_out, amount_in_wei, sender_address, private_key):
@@ -917,59 +943,104 @@ class OGSwapper:
 
     def swap_token_to_token(self, private_key, token_in, token_out, wallet_num=0, total_wallets=1):
         """Lakukan swap dari satu token ke token lain dengan penanganan nonce yang lebih baik"""
-        try:
-            wallet = self.web3.eth.account.from_key(private_key)
-            address = wallet.address
-
-            self.reset_pending_transactions(address, private_key)
-
-            decimals = self.token_decimals.get(token_in, 18)
+        max_retries = 2  # Jumlah maksimum percobaan untuk swap keseluruhan
+    
+        for retry in range(max_retries):
+            try:
+                # Pastikan RPC terhubung
+                if not self.web3.is_connected():
+                    print(f" ⚠️ RPC tidak terhubung, mencoba beralih...")
+                    if not self.switch_rpc():
+                        print_error(f"❌ Gagal terhubung ke RPC. Membatalkan swap.")
+                        return False
             
-            if token_in == "USDT":
-                random_amount = round(random.uniform(CONFIG["SWAP_AMOUNT_USDT"][0], CONFIG["SWAP_AMOUNT_USDT"][1]), 2)
-            elif token_in == "ETH":
-                random_amount = round(random.uniform(CONFIG["SWAP_AMOUNT_ETH"][0], CONFIG["SWAP_AMOUNT_ETH"][1]), 6)
-            elif token_in == "BTC":
-                random_amount = round(random.uniform(CONFIG["SWAP_AMOUNT_BTC"][0], CONFIG["SWAP_AMOUNT_BTC"][1]), 6)
-            else:
-                random_amount = round(random.uniform(0.01, 0.03), 2)
+                wallet = self.web3.eth.account.from_key(private_key)
+                address = wallet.address
+
+                self.reset_pending_transactions(address, private_key)
+
+                decimals = self.token_decimals.get(token_in, 18)
+            
+                if token_in == "USDT":
+                    random_amount = round(random.uniform(CONFIG["SWAP_AMOUNT_USDT"][0], CONFIG["SWAP_AMOUNT_USDT"][1]), 2)
+                elif token_in == "ETH":
+                    random_amount = round(random.uniform(CONFIG["SWAP_AMOUNT_ETH"][0], CONFIG["SWAP_AMOUNT_ETH"][1]), 6)
+                elif token_in == "BTC":
+                    random_amount = round(random.uniform(CONFIG["SWAP_AMOUNT_BTC"][0], CONFIG["SWAP_AMOUNT_BTC"][1]), 6)
+                else:
+                    random_amount = round(random.uniform(0.01, 0.03), 2)
                 
-            amount_in_wei = int(random_amount * (10 ** decimals))
+                amount_in_wei = int(random_amount * (10 ** decimals))
             
-            print_debug(f"🔄 Memulai swap {random_amount} {token_in} ke {token_out}", wallet_num, total_wallets)
+                print_debug(f"🔄 Memulai random swap {random_amount} {token_in} </> {token_out}", wallet_num, total_wallets)
             
-            self.check_wallet_balance(address, token_in)
+                try:
+                    self.check_wallet_balance(address, token_in)
+                except Exception as balance_error:
+                    if "429" in str(balance_error).lower() and retry < max_retries - 1:
+                        print_warning(f"⚠️ Error RPC saat memeriksa saldo. Mencoba beralih RPC...")
+                        if self.switch_rpc():
+                            continue  # Coba lagi dari awal
+                        else:
+                            print_error(f"❌ Gagal beralih RPC. Membatalkan swap.")
+                            return False
+                    else:
+                        raise  # Reaise error lainnya
             
-            router_address = TOKEN_ADDRESSES["ROUTER"]
-            approval_result = self.perform_token_approval(token_in, router_address, amount_in_wei, address, private_key)
-            if not approval_result:
-                return False
+                router_address = TOKEN_ADDRESSES["ROUTER"]
+                approval_result = self.perform_token_approval(token_in, router_address, amount_in_wei, address, private_key)
+                if not approval_result:
+                    if retry < max_retries - 1:
+                        print(f"⚠️  Approval gagal, mencoba lagi setelah beralih RPC...")
+                        if self.switch_rpc():
+                            continue  # Coba lagi dari awal
+                    return False
 
-            swap_result = self.perform_token_swap(token_in, token_out, amount_in_wei, address, private_key)
-            if not swap_result:
-                return False
+                swap_result = self.perform_token_swap(token_in, token_out, amount_in_wei, address, private_key)
+                if not swap_result:
+                    if retry < max_retries - 1:
+                        print_warning(f"⚠️ Swap gagal, mencoba lagi setelah beralih RPC...")
+                        if self.switch_rpc():
+                            continue  # Coba lagi dari awal
+                    return False
 
-            sleep_seconds(5, "Memperbarui saldo")
-            self.check_wallet_balance(address, token_out)
+                sleep_seconds(5, "Memperbarui saldo")
+                self.check_wallet_balance(address, token_out)
 
-            delay = random.randint(CONFIG["COOLDOWN"]["SUCCESS"][0], CONFIG["COOLDOWN"]["SUCCESS"][1])
-            sleep_seconds(delay, "Cooldown setelah transaksi berhasil")
+                delay = random.randint(CONFIG["COOLDOWN"]["SUCCESS"][0], CONFIG["COOLDOWN"]["SUCCESS"][1])
+                sleep_seconds(delay, "Cooldown setelah transaksi berhasil")
             
-            return True
+                return True
             
-        except Exception as e:
-            print_error(f"❌ Error dalam proses swap: {str(e)}")
-            return False
+            except Exception as e:
+                error_msg = str(e).lower()
+            
+                # Jika error terkait dengan RPC, coba switch RPC
+                if "429" in error_msg or "too many requests" in error_msg:
+                    if retry < max_retries - 1:
+                        print_warning(f"⚠️ RPC error: {str(e)}. Mencoba beralih RPC...")
+                        if self.switch_rpc():
+                            continue  # Coba lagi dari awal dengan RPC baru
+            
+                print_error(f"❌ Error dalam proses swap: {str(e)}")
+            
+                if retry < max_retries - 1:
+                    print_warning(f"⚠️ Mencoba swap lagi (percobaan {retry+2}/{max_retries})...")
+                    sleep_seconds(10, "Menunggu sebelum mencoba lagi")
+                else:
+                    return False
+    
+        return False
 
     def process_swaps(self, account, wallet_num, total_wallets, is_last_wallet=False):
         """Proses beberapa swap untuk satu wallet"""
         private_key = account["key"]
         address = account["address"]
         
-        print_info(f"🔄 Menggunakan wallet {wallet_num}/{total_wallets}: {short_address(address)}")
+        print(f"🔄 Menggunakan wallet {Fore.YELLOW}[{wallet_num}/{total_wallets}]{Fore.RESET} -> {Fore.YELLOW}{short_address(address)}{Fore.RESET}")
         
         tx_count = random.randint(CONFIG["TRANSACTIONS_PER_WALLET"][0], CONFIG["TRANSACTIONS_PER_WALLET"][1])
-        print_info(f"📊 Merencanakan {tx_count} transaksi untuk wallet ini")
+        print(f"📊 Merencanakan {Fore.MAGENTA}{tx_count} transaksi TXiD{Fore.RESET} untuk wallet ini")
 
         initial_balance = self.check_wallet_balance(address)
 
@@ -983,7 +1054,7 @@ class OGSwapper:
         ]
         
         for i in range(tx_count):
-            print_info(f"🔄 Transaksi {i+1}/{tx_count} untuk wallet {wallet_num}")
+            print(f"🔄 Transaksi {Fore.YELLOW}[{i+1}/{tx_count}]{Fore.RESET} untuk {Fore.YELLOW}[wallet {wallet_num}]{Fore.RESET}")
             
             swap_in, swap_out = swap_sequences[i % len(swap_sequences)]
             
@@ -992,7 +1063,7 @@ class OGSwapper:
             if success:
                 success_count += 1
             else:
-                print_warning(f"⚠️ Transaksi {i+1} gagal, lanjut ke transaksi berikutnya")
+                print(f"⚠️  Transaksi {i+1} gagal, lanjut ke transaksi berikutnya")
             
             # Delay antara transaksi dalam wallet yang sama deitk
             if i < tx_count - 1:
@@ -1047,25 +1118,35 @@ class OGSwapper:
 
     def execute_cycle(self):
         """Eksekusi satu siklus swap untuk semua wallet"""
-        print_success(f"🔄 Memulai siklus swap #{self.cycle_count} dengan {len(self.accounts)} wallet")
-        
+        print(f"🔄 Memulai siklus swap ke [{self.cycle_count}] dengan [{len(self.accounts)}] wallet")
+    
+        # Pastikan RPC terhubung atau beralih
+        if not self.web3.is_connected():
+            print(f"🔄 Koneksi RPC hilang sebelum siklus, mencoba beralih...")
+            if not self.switch_rpc():
+                print_warning(f"❌ Gagal menemukan RPC yang berfungsi. Menunggu sebelum mencoba lagi...")
+                sleep_seconds(60)  # Tunggu satu menit sebelum mencoba siklus lagi
+                if not self.switch_rpc():
+                    print_error(f"❌ Masih tidak ada RPC yang berfungsi. Keluar dari siklus.")
+                    return False
+    
         self.update_gas_price()
-        
+    
         for idx, account in enumerate(self.accounts):
             wallet_num = idx + 1
             is_last_wallet = idx == len(self.accounts) - 1
-            
+        
             success = self.process_swaps(account, wallet_num, len(self.accounts), is_last_wallet)
             if not success:
                 print_warning(f"⚠️ Semua transaksi pada wallet {wallet_num} gagal. Lanjut ke wallet berikutnya.")
-        
+    
         print_success(f"✅ Siklus #{self.cycle_count} selesai untuk semua wallet")
         return True
 
 # ======================== Main Function ========================
 def main():
     global_retries = 3
-    retry_delay = 60  # dtik
+    retry_delay = 65  # dtik
     
     while global_retries > 0:
         try:
