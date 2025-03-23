@@ -1699,8 +1699,8 @@ class OGDataUploader:
                             logger.info(f"{Fore.GREEN}✅ CoinGecko data upload successful!{Style.RESET_ALL}")
                         else:
                             logger.error(f"{Fore.RED}❌ Failed to submit CoinGecko data to contract{Style.RESET_ALL}")
-                    else:
-                        logger.warning("Submission validation failed, trying optimized submission")
+                else:
+                    logger.warning("Submission validation failed, trying optimized submission")
                           
         except Exception as e:
             logger.error(f"Error in hourly update process: {str(e)}")
