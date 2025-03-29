@@ -97,6 +97,22 @@ def validate_rpc_urls(urls):
     
     return valid_urls
 
+def handle_rpc_error(error_msg, w3, current_rpc, attempt=0):
+    """Handle RPC errors with consistent retry logic"""
+    if "429" in error_msg.lower() or "too many requests" in error_msg.lower() or "server error" in error_msg.lower():
+        print_warning(f"⚠️ RPC problem detected: {error_msg[:100]}...")
+        if attempt < 3:  # Limit the number of consecutive RPC switch attempts
+            print_warning(f"🔄 Attempting to switch RPC (attempt {attempt+1})...")
+            try:
+                new_w3, new_rpc = switch_rpc(current_rpc)
+                if new_w3.is_connected():
+                    return new_w3, new_rpc, True  # Success
+            except Exception as e:
+                print_error(f"❌ Failed to switch RPC: {str(e)}")
+    
+    # If we reach here, either it's not an RPC error or switching failed
+    return w3, current_rpc, False
+
 # ================= RPC Connection Management ===================
 def connect_to_rpc():
     """Connect to RPC endpoint, with rotation if failed"""
@@ -314,13 +330,14 @@ def estimate_gas(w3, contract_func, sender):
         print_warning(f"⚠️ Estimasi gas failed: {str(e)}. Used default: {default_gas}")
         return default_gas
 
-def wait_for_transaction_completion(w3, tx_hash, timeout=210):
+def wait_for_transaction_completion(w3, tx_hash, timeout=210, current_rpc=None):
     """Waiting for transactions to complete with better error handling"""
     print_info(f"⏳ Waiting transaction {tx_hash} terconfirmed...")
     start_time = time.time()
     
     last_error_time = 0
     check_interval = 5
+    rpc_switch_attempts = 0
 
     while time.time() - start_time < timeout:
         try:
@@ -340,6 +357,19 @@ def wait_for_transaction_completion(w3, tx_hash, timeout=210):
                 if "not found" not in error_msg:
                     print_warning(f"⚠️ Error checking receipt: {str(e)}")
                     last_error_time = current_time
+                    
+                    # RPC-specific errors
+                    if ("429" in error_msg or "too many requests" in error_msg or "server error" in error_msg) and rpc_switch_attempts < 3:
+                        print_warning(f"⚠️ RPC limiting requests, trying to switch...")
+                        try:
+                            if current_rpc:
+                                new_w3, new_rpc = switch_rpc(current_rpc)
+                                w3 = new_w3
+                                current_rpc = new_rpc
+                                rpc_switch_attempts += 1
+                                continue
+                        except Exception as switch_error:
+                            print_warning(f"Failed to switch RPC: {str(switch_error)}")
 
         time.sleep(check_interval)
 
@@ -605,10 +635,12 @@ def compile_contract(contract_source, contract_name):
 
     return {"abi": contract_interface["abi"], "bytecode": contract_interface["bin"]}
 
-
-async def deploy_contract(w3, current_rpc, contract_type, contract_name, private_key):
+async def deploy_contract(w3, current_rpc, contract_type, contract_name, private_key, attempt=0):
     """Deploy a contract and return its details."""
     print_info(f"⚙️ {Fore.MAGENTA} Compiling {Fore.GREEN}{contract_type}{Fore.MAGENTA} the contract name is {Fore.GREEN}{contract_name}{Style.RESET_ALL}")
+    if attempt >= 3:  # Limit maximum retries
+        print_error(f"❌ Exceeded maximum retry attempts for deploying {contract_name}")
+        return None
 
     contract_source = CONTRACTS[contract_type]
     source_contract_name = contract_type
@@ -702,7 +734,7 @@ async def deploy_contract(w3, current_rpc, contract_type, contract_name, private
 
     try:
         tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
-        print_info(f"📨 Transaction explorer TXiD: {Fore.CYAN}{w3.to_hex(tx_hash)}{Style.RESET_ALL}")
+        print_info(f"📨 Transaction explorer TXiD: {Fore.CYAN} {w3.to_hex(tx_hash)} {Style.RESET_ALL}")
 
         print_warning(f"⏳ Waiting for transaction confirmation...")
         tx_receipt = wait_for_transaction_completion(w3, tx_hash, timeout=210)
@@ -753,15 +785,27 @@ async def deploy_contract(w3, current_rpc, contract_type, contract_name, private
             return None
 
     except Exception as e:
-        print_error(f"❌ Error during deployment: {Fore.RED}{str(e)}{Style.RESET_ALL}")
+        error_msg = str(e)
+        print_error(f"❌ Error during deployment: {Fore.RED}{error_msg}{Style.RESET_ALL}")
 
-        if "429" in str(e) or "too many requests" in str(e) or "server error" in str(e):
+        # Handle RPC errors
+        if "429" in error_msg or "too many requests" in error_msg or "server error" in error_msg:
             print_warning(f"⚠️ RPC problem, try switching to other RPC...")
-            w3, current_rpc = switch_rpc(current_rpc)
-            return await deploy_contract(w3, current_rpc, contract_type, contract_name, private_key)
+            try:
+                new_w3, new_rpc = switch_rpc(current_rpc)
+                print_success(f"✅ Successfully switched to new RPC, retrying deployment...")
+                return await deploy_contract(new_w3, new_rpc, contract_type, contract_name, private_key, attempt + 1)
+            except Exception as switch_error:
+                print_error(f"❌ Failed to switch RPC: {str(switch_error)}")
+                
+        # For other errors, simple retry with a delay
+        if attempt < 2:  # Allow a couple retries for non-RPC errors too
+            retry_delay = 30 * (attempt + 1)  # Increasing delay
+            print_warning(f"⏳ Retrying deployment in {retry_delay} seconds... (attempt {attempt + 1}/3)")
+            await asyncio.sleep(retry_delay)
+            return await deploy_contract(w3, current_rpc, contract_type, contract_name, private_key, attempt + 1)
             
         return None
-
 
 def save_deployment_records(deployments):
     """Save deployment records to a JSON file."""
@@ -846,7 +890,13 @@ async def main():
         w3, current_rpc = connect_to_rpc()
     except ConnectionError as e:
         print_error(f"❌ {str(e)}")
-        return
+        print_warning("⏳ Waiting 30 seconds before trying again...")
+        await asyncio.sleep(30)
+        try:
+            w3, current_rpc = connect_to_rpc()
+        except Exception as retry_error:
+            print_error(f"❌ Still cannot connect: {str(retry_error)}")
+            return
 
     valid_wallets = []
     print(f"\n📊{Fore.YELLOW} Checking wallet balances:{Style.RESET_ALL}")
@@ -877,8 +927,8 @@ async def main():
     print(f"   Chain ID: {chain_id} {Fore.MAGENTA}0G-Newton-Testnet {Style.RESET_ALL}")
     print(f"   Connected to RPC: {Fore.GREEN}{w3.provider.endpoint_uri}{Style.RESET_ALL}")
 
-    # Get the total number of contracts to deploy 2
-    total_contracts_per_wallet = 2
+    # Get the total number of contracts to deploy 3
+    total_contracts_per_wallet = 3
     total_contracts = len(valid_wallets) * total_contracts_per_wallet
 
     print(f"🚀{Fore.YELLOW} Will deploy {total_contracts} contracts total ({total_contracts_per_wallet} per wallet){Style.RESET_ALL}")
@@ -888,9 +938,9 @@ async def main():
     print(f"   Deploy results will {Fore.RED}not be saved{Style.RESET_ALL} in favour of keeping the {Fore.GREEN}folder clean{Style.RESET_ALL}")
     print(f"   Wallet rotation will occur with {Fore.CYAN}2-5 minute{Style.RESET_ALL} delays between wallets")
 
-    print(f"{Fore.MAGENTA}⚠️ Starting in 13 seconds. Press Ctrl+C to cancel...{Style.RESET_ALL}")
+    print(f"{Fore.MAGENTA}⚠️ Starting in 15 seconds. Press Ctrl+C to cancel...{Style.RESET_ALL}")
     try:
-        for i in range(13, 0, -1):
+        for i in range(15, 0, -1):
             print(f"{Fore.YELLOW} Starting in {i} seconds...{Style.RESET_ALL}", end="\r")
             await asyncio.sleep(1)
         print(f"{Fore.GREEN} Starting now!{Style.RESET_ALL}")
@@ -908,6 +958,21 @@ async def main():
     for cycle in range(total_contracts_per_wallet):
         cycle_start_time = datetime.now()
         print(f"\n{Fore.CYAN}== Starting deployment cycle {cycle+1}/{total_contracts_per_wallet} at {cycle_start_time.strftime('%Y-%m-%d %H:%M:%S')} =={Style.RESET_ALL}")
+
+        # Check RPC connection at the start of each cycle
+        if not w3.is_connected():
+            print_warning("⚠️ RPC connection lost at cycle start, attempting to reconnect...")
+            try:
+                w3, current_rpc = connect_to_rpc()
+            except Exception as e:
+                print_error(f"❌ Failed to reconnect: {str(e)}")
+                print_warning("⏳ Waiting 60 seconds before trying again...")
+                await asyncio.sleep(60)
+                try:
+                    w3, current_rpc = connect_to_rpc()
+                except Exception as retry_error:
+                    print_error(f"❌ Still cannot connect: {str(retry_error)}")
+                    continue  # Skip this cycle
 
         for wallet_idx, wallet_key in enumerate(valid_wallets):
             wallet_account = w3.eth.account.from_key(wallet_key)
@@ -951,7 +1016,7 @@ async def main():
             else:
                 print_error(f"❌ Deployment failed for wallet {short_address(wallet_address)}. Moving to next wallet.")
                 if wallet_idx < len(valid_wallets) - 1:
-                    wait_seconds = random.randint(60, 120)  # 1-2 menit
+                    wait_seconds = random.randint(60, 200)  # 1-2 menit
                     print_warning(f"⏳ Moving on to the next wallet in {wait_seconds} detik if failed")
                     await asyncio.sleep(wait_seconds)
 
