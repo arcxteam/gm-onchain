@@ -83,7 +83,7 @@ def validate_rpc_urls(urls):
     
     if not valid_urls:
         print_error("No valid RPC URL found. Using the default.")
-        return ["https://tea-sepolia.g.alchemy.com/v2/G9UmvdH6oFBXk4Z_-fbJKt8m6wrdf6Ai", "https://tea-sepolia.g.alchemy.com/public"]
+        return ["https://tea-sepolia.g.alchemy.com/public"]
     
     return valid_urls
 
