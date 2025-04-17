@@ -24,7 +24,6 @@ except Exception as e:
 # ======================== Constants ========================
 CONFIG = {
     "RPC_URLS": [
-        "https://tea-sepolia.g.alchemy.com/v2/G9UmvdH6oFBXk4Z_-fbJKt8m6wrdf6Ai",
         "https://tea-sepolia.g.alchemy.com/public"
     ],
     "GAS_MULTIPLIER": 1.5,
@@ -34,8 +33,8 @@ CONFIG = {
     "GAS_RESET_GWEI": 20,
     "RPC_TIMEOUT": 21,  # detik
     "RPC_RETRY_DELAY": 10,  # detik
-    "WALLET_SWITCH_DELAY_MIN": 120,  # detik
-    "WALLET_SWITCH_DELAY_MAX": 300,  # detik
+    "WALLET_SWITCH_DELAY_MIN": 123,  # detik
+    "WALLET_SWITCH_DELAY_MAX": 333,  # detik
 }
 
 CHAIN_SYMBOLS = {10218: "TEA-Sepolia"}
@@ -668,7 +667,7 @@ async def deploy_contract(w3, current_rpc, contract_type, contract_name, private
     nonce = get_safe_nonce(w3, wallet_address)
 
     # Estimasi gas Default
-    gas_limit = 250000
+    gas_limit = 200000
     try:
         estimated_gas = w3.eth.estimate_gas({"from": wallet_address, "data": contract_data["bytecode"]})
         gas_limit = int(estimated_gas * 1.11)  # 10% buffer
