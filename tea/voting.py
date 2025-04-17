@@ -26,9 +26,9 @@ CONFIG = {
     "GAS_MIN_GWEI": 50,
     "GAS_MAX_GWEI": 100,
     "GAS_RESET_GWEI": 50,
-    "COOLDOWN": {"SUCCESS": (11, 33), "ERROR": (33, 66)},
-    "WALLET_SWITCH_DELAY": (122, 333),  # Short delay wallet secons
-    "CYCLE_COMPLETE_DELAY": (111, 555), # Long delay all wallets use secons
+    "COOLDOWN": {"SUCCESS": (20, 60), "ERROR": (30, 80)},
+    "WALLET_SWITCH_DELAY": (222, 444),  # Short delay wallet secons
+    "CYCLE_COMPLETE_DELAY": (333, 666), # Long delay all wallets use secons
     "RPC_TIMEOUT": 15,  # detik
     "RPC_RETRY_DELAY": 8,  # detik
 }
@@ -613,7 +613,7 @@ class VoteScheduler:
                     else:
                         return False
                 else:
-                    raise  # Re-raise if it's a different error
+                    raise
 
             # Build transaction - handle RPC error
             try:
