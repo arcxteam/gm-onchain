@@ -1,7 +1,8 @@
 web3==6.20.4
-requests==2.32.3
 python-dotenv==1.0.0
-apscheduler==3.10.4
 colorama==0.4.6
+pytz==2025.1
 eth-account
 py-solc-x
+asyncio
+requests
