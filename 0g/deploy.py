@@ -24,7 +24,6 @@ except Exception as e:
 # ======================== Constants ========================
 CONFIG = {
     "RPC_URLS": [
-        "https://16600.rpc.thirdweb.com",
         "https://evm-rpc.0g.testnet.node75.org",
         "https://rpc.ankr.com/0g_newton",
         "https://evmrpc-testnet.0g.ai",
@@ -37,10 +36,10 @@ CONFIG = {
         "https://0g-evm-rpc.murphynode.net",
         "https://evm-0g.winnode.xyz"
     ],
-    "GAS_MULTIPLIER": 1.1,
-    "MAX_PRIORITY_GWEI": 6.5,
-    "GAS_MIN_GWEI": 4.5,
-    "GAS_MAX_GWEI": 15.0,
+    "GAS_MULTIPLIER": 1.01,
+    "MAX_PRIORITY_GWEI": 5,
+    "GAS_MIN_GWEI": 3.5,
+    "GAS_MAX_GWEI": 10,
     "GAS_RESET_GWEI": 5.0,
     "RPC_TIMEOUT": 21,  # detik
     "RPC_RETRY_DELAY": 10,  # detik
@@ -48,7 +47,7 @@ CONFIG = {
     "WALLET_SWITCH_DELAY_MAX": 300,  # detik
 }
 
-CHAIN_SYMBOLS = {16600: "A0GI"}
+CHAIN_SYMBOLS = {80087: "0G"}
 
 # ======================== Helper Functions ========================
 def print_info(message):
@@ -93,7 +92,7 @@ def validate_rpc_urls(urls):
     
     if not valid_urls:
         print_error("No valid RPC URL found. Using the default.")
-        return ["https://16600.rpc.thirdweb.com", "https://evmrpc-testnet.0g.ai"]
+        return ["https://evmrpc-testnet.0g.ai"]
     
     return valid_urls
 
@@ -300,10 +299,10 @@ def reset_pending_transactions(w3, address, private_key):
 
                 gas_price = update_gas_price(w3)
                 if isinstance(gas_price, dict):
-                    tx["maxFeePerGas"] = w3.to_wei(10, "gwei")
-                    tx["maxPriorityFeePerGas"] = w3.to_wei(2, "gwei")
+                    tx["maxFeePerGas"] = w3.to_wei(2, "gwei")
+                    tx["maxPriorityFeePerGas"] = w3.to_wei(3, "gwei")
                 else:
-                    tx["gasPrice"] = w3.to_wei(10, "gwei")
+                    tx["gasPrice"] = w3.to_wei(5, "gwei")
 
                 try:
                     signed = w3.eth.account.sign_transaction(tx, private_key)
@@ -326,7 +325,7 @@ def estimate_gas(w3, contract_func, sender):
         gas_estimate = contract_func.estimate_gas({'from': sender})
         return int(gas_estimate * 1.02)  # 10% buffer
     except Exception as e:
-        default_gas = 155000
+        default_gas = 100000
         print_warning(f"⚠️ Estimasi gas failed: {str(e)}. Used default: {default_gas}")
         return default_gas
 
@@ -385,7 +384,7 @@ def track_gas_usage(w3, tx_receipt, gas_price):
         cost_wei = gas_used * gas_price
         
     cost_eth = w3.from_wei(cost_wei, "ether")
-    print_info(f"📊 Gas used: {gas_used} | Biaya Cost: {cost_eth:.8f} {CHAIN_SYMBOLS.get(w3.eth.chain_id, 'A0GI')}")
+    print_info(f"📊 Gas used: {gas_used} | Biaya Cost: {cost_eth:.8f} {CHAIN_SYMBOLS.get(w3.eth.chain_id, '0G')}")
 
 def load_private_keys():
     """Load private keys dari environment variable dan file"""
@@ -661,7 +660,7 @@ async def deploy_contract(w3, current_rpc, contract_type, contract_name, private
     # Get current balance
     balance = w3.eth.get_balance(wallet_address)
     balance_eth = w3.from_wei(balance, "ether")
-    print_info(f"🤑 Current wallet balance: {Fore.YELLOW}{balance_eth:.6f} A0GI{Style.RESET_ALL}")
+    print_info(f"🤑 Current wallet balance: {Fore.YELLOW}{balance_eth:.6f} 0G{Style.RESET_ALL}")
 
     # Get gas price
     gas_price = update_gas_price(w3)
@@ -678,10 +677,10 @@ async def deploy_contract(w3, current_rpc, contract_type, contract_name, private
     nonce = get_safe_nonce(w3, wallet_address)
 
     # Estimasi gas Default
-    gas_limit = 155000
+    gas_limit = 100000
     try:
         estimated_gas = w3.eth.estimate_gas({"from": wallet_address, "data": contract_data["bytecode"]})
-        gas_limit = int(estimated_gas * 1.02)  # 10% buffer
+        gas_limit = int(estimated_gas * 1.0022)  # 5-10% buffer
         print_info(f"⛽ Estimated gas: {Fore.YELLOW}{estimated_gas}{Style.RESET_ALL} -> Add 5-10% boosting -> final {Fore.YELLOW}gas is {gas_limit}{Style.RESET_ALL}")
     except Exception as e:
         print_warning(f"⚠️ Could not estimate gas: {str(e)}")
@@ -694,10 +693,10 @@ async def deploy_contract(w3, current_rpc, contract_type, contract_name, private
         max_gas_cost = gas_limit * gas_price
         
     max_gas_cost_eth = w3.from_wei(max_gas_cost, "ether")
-    print_info(f"💲 Maximum gas cost: {Fore.YELLOW}{max_gas_cost_eth:.6f} A0GI{Style.RESET_ALL}")
+    print_info(f"💲 Maximum gas cost: {Fore.YELLOW}{max_gas_cost_eth:.6f} 0G{Style.RESET_ALL}")
 
     if balance < max_gas_cost:
-        print_error(f"❌ Insufficient balance for gas! Need {Fore.RED}{max_gas_cost_eth:.6f}{Style.RESET_ALL} A0GI but have {Fore.YELLOW}{balance_eth:.6f} A0GI{Style.RESET_ALL}")
+        print_error(f"❌ Insufficient balance for gas! Need {Fore.RED}{max_gas_cost_eth:.6f}{Style.RESET_ALL} 0G but have {Fore.YELLOW}{balance_eth:.6f} 0G{Style.RESET_ALL}")
         return None
     tx_data = {}
     
@@ -753,7 +752,7 @@ async def deploy_contract(w3, current_rpc, contract_type, contract_name, private
                 actual_gas_cost = tx_receipt.gasUsed * gas_price
                 
             actual_gas_cost_eth = w3.from_wei(actual_gas_cost, "ether")
-            print_info(f"💲 Actual gas cost: {Fore.YELLOW}{actual_gas_cost_eth:.6f} A0GI{Style.RESET_ALL}")
+            print_info(f"💲 Actual gas cost: {Fore.YELLOW}{actual_gas_cost_eth:.6f} 0G{Style.RESET_ALL}")
             
             track_gas_usage(w3, tx_receipt, gas_price)
 
@@ -909,7 +908,7 @@ async def main():
             balance = w3.eth.get_balance(wallet_address)
             balance_eth = w3.from_wei(balance, "ether")
 
-            print(f"   Wallet {idx+1}: {Fore.CYAN}{short_address(wallet_address)}{Style.RESET_ALL} | Balance: {Fore.YELLOW}{balance_eth:.6f} A0GI{Style.RESET_ALL}")
+            print(f"   Wallet {idx+1}: {Fore.CYAN}{short_address(wallet_address)}{Style.RESET_ALL} | Balance: {Fore.YELLOW}{balance_eth:.6f} 0G{Style.RESET_ALL}")
 
             if balance_eth >= 0.05:
                 valid_wallets.append(private_key)
@@ -927,8 +926,8 @@ async def main():
     print(f"   Chain ID: {chain_id} {Fore.MAGENTA}0G-Newton-Testnet {Style.RESET_ALL}")
     print(f"   Connected to RPC: {Fore.GREEN}{w3.provider.endpoint_uri}{Style.RESET_ALL}")
 
-    # Get the total number of contracts to deploy 3
-    total_contracts_per_wallet = 3
+    # Get the total number of contracts to deploy 10
+    total_contracts_per_wallet = 10
     total_contracts = len(valid_wallets) * total_contracts_per_wallet
 
     print(f"🚀{Fore.YELLOW} Will deploy {total_contracts} contracts total ({total_contracts_per_wallet} per wallet){Style.RESET_ALL}")
@@ -1008,7 +1007,7 @@ async def main():
                 deployments.append(deployment)
                 save_deployment_records(deployments)
 
-                # Rotasi wallet dengan jeda random 2-5 menit
+                # Rotasi wallet dengan jeda random 1-5 menit
                 if wallet_idx < len(valid_wallets) - 1:
                     wait_seconds = random.randint(CONFIG["WALLET_SWITCH_DELAY_MIN"], CONFIG["WALLET_SWITCH_DELAY_MAX"])
                     print_warning(f"⏳ Moving on to the next wallet in {wait_seconds} second (~{wait_seconds//60} minutes)")
@@ -1016,13 +1015,13 @@ async def main():
             else:
                 print_error(f"❌ Deployment failed for wallet {short_address(wallet_address)}. Moving to next wallet.")
                 if wallet_idx < len(valid_wallets) - 1:
-                    wait_seconds = random.randint(60, 200)  # 1-2 menit
+                    wait_seconds = random.randint(60, 350)  # 1-5 menit
                     print_warning(f"⏳ Moving on to the next wallet in {wait_seconds} detik if failed")
                     await asyncio.sleep(wait_seconds)
 
         if cycle < total_contracts_per_wallet - 1:
-            # Random wait time between 7-8 hours
-            wait_hours = random.uniform(7.0, 8.0)
+            # Random wait time between 3-4 hours
+            wait_hours = random.uniform(3.0, 4.0)
             await wait_with_progress(wait_hours,f"Completed cycle {cycle+1}/{total_contracts_per_wallet}. Waiting for next cycle",)
 
     if deployments:
