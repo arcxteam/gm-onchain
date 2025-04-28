@@ -20,7 +20,7 @@ init(autoreset=True)
 load_dotenv()
 
 LOG_FILE = "og_uploader.log"
-MAX_LOG_SIZE = 4 * 1024 * 1024  # 4 MB
+MAX_LOG_SIZE = 4 * 1024 * 1024
 MAX_LOG_FILES = 3
 
 # Setup logging
@@ -103,17 +103,8 @@ def load_rpc_urls():
     rpc_urls_str = os.getenv("RPC_URLS")
     if not rpc_urls_str:
         return [
-            "https://evm-rpc.0g.testnet.node75.org",
-            "https://rpc.ankr.com/0g_newton",
             "https://evmrpc-testnet.0g.ai",
-            "https://0g-json-rpc-public.originstake.com",
-            "https://0g-rpc-evm01.validatorvn.com",
-            "https://og-testnet-jsonrpc.itrocket.net",
-            "https://0g-evmrpc.zstake.xyz/",
-            "https://0g-rpc.murphynode.net",
-            "https://0g-api.murphynode.net",
-            "https://0g-evm-rpc.murphynode.net",
-            "https://evm-0g.winnode.xyz"
+            "https://rpc.ankr.com/0g_newton"
         ]
     
     urls = [url.strip() for url in rpc_urls_str.split(",") if url.strip()]
@@ -328,7 +319,7 @@ class OGDataUploader:
                 logger.info(f"Using global minimum unit price: {global_min_price} 0G per sector")
                 min_price_per_sector = global_min_price
             else:
-                min_price_per_sector = 0.00001
+                min_price_per_sector = 0.00002
                 logger.info(f"Using estimated min price: {min_price_per_sector} 0G per sector")
         
             premium_factor = 1.1
@@ -351,8 +342,8 @@ class OGDataUploader:
             return storage_endowment_wei
         except Exception as e:
             logger.error(f"Error calculating storage fee: {e}")
-            default_fee = self.w3.to_wei(0.00001, 'ether')
-            logger.info(f"Using default storage fee: 0.00001 0G")
+            default_fee = self.w3.to_wei(0.00002, 'ether')
+            logger.info(f"Using default storage fee: 0.00002 0G")
             return default_fee
 
     def validate_contract_submission(self, submission):
@@ -485,19 +476,13 @@ class OGDataUploader:
             return self.prepare_submission(first_chunk)
 
     def build_merkle_tree(self, leaf_hashes):
-        """Bangun Merkle tree dari daftar hash daun"""
+        """Bangun Merkle tree dari daftar hash daun dan kembalikan hanya root node untuk file kecil"""
         if not leaf_hashes:
             return []
-        
+    
         current_level = leaf_hashes
-        tree_nodes = []
         height = 0
-        
-        # Tambahkan daun sebagai node dengan height 0
-        for leaf in leaf_hashes:
-            tree_nodes.append({"root": leaf, "height": height})
-        
-        # Bangun tree hingga root
+    
         while len(current_level) > 1:
             next_level = []
             height += 1
@@ -507,13 +492,13 @@ class OGDataUploader:
                 combined = left + right
                 parent_hash = self.w3.keccak(combined)
                 next_level.append(parent_hash)
-                tree_nodes.append({"root": parent_hash, "height": height})
             current_level = next_level
-        
-        return tree_nodes
+    
+        # Untuk file kecil, kembalikan hanya root node dengan height=0
+        return [{"root": current_level[0], "height": 0}]
 
     def prepare_submission(self, file_path, network="turbo"):
-        """Gabungan prepare_simple_submission dan prepare_optimized_submission dengan Merkle tree"""
+        """Persiapkan submission berdasarkan ukuran file"""
         try:
             logger.info(f"{Fore.YELLOW} Step 1: Upload File Prepared{Fore.RESET} data is {Fore.MAGENTA}{file_path} {Fore.RESET}")
 
@@ -524,7 +509,13 @@ class OGDataUploader:
             file_size_kb = file_size / 1024
             logger.info(f"File Size: {file_size_kb:.2f} KB")
     
-            SECTOR_SIZE = 256
+            SECTOR_SIZE = 256  # DEFAULT_CHUNK_SIZE
+            SEGMENT_SIZE = 256 * 1024  # DEFAULT_SEGMENT_SIZE (256 KB)
+        
+            # Hitung jumlah chunk dan segmen
+            num_chunks = (file_size + SECTOR_SIZE - 1) // SECTOR_SIZE  # Ceiling division
+            num_segments = (file_size + SEGMENT_SIZE - 1) // SEGMENT_SIZE  # Ceiling division
+        
             if file_size <= SECTOR_SIZE:
                 # Direct upload untuk file kecil
                 root_hash = self.w3.keccak(data_bytes)
@@ -538,9 +529,10 @@ class OGDataUploader:
                     logger.error("Failed to build Merkle tree")
                     return None
     
-            length = file_size
-            logger.info(f"Setting length to {length} (bytes)")
-        
+            # Gunakan jumlah segmen sebagai length (default)
+            length = num_segments
+            logger.info(f"Setting length to {length} (segments), num_chunks={num_chunks}, num_bytes={file_size}")
+    
             tags = "0x"
     
             root_hash_hex = submission_nodes[-1]["root"].hex() if submission_nodes else ""
@@ -553,11 +545,13 @@ class OGDataUploader:
                 "file_path": file_path,
                 "network": network,
                 "root_hash": root_hash_hex,
-                "file_size_kb": file_size_kb
+                "file_size_kb": file_size_kb,
+                "num_chunks": num_chunks,  # Simpan untuk retry
+                "num_bytes": file_size  # Simpan untuk retry
             }
             logger.info(f"{Fore.MAGENTA} ✓ Upload successfully prepared {Fore.RESET}")
     
-            logger.info(f"Submission details: length={submission['length']}, tags={submission['tags']}")
+            logger.info(f"Submission details: length={submission['length']} segments, tags={submission['tags']}")
             logger.info(f"Node details: nodes_count={len(submission['nodes'])}, root-hash {submission['root_hash']}")
     
             if self.validate_submission_against_contract(submission) and self.validate_merkle_tree_structure(submission):
@@ -928,32 +922,13 @@ class OGDataUploader:
         return True
 
     def validate_merkle_tree_structure(self, submission):
-        """Validates merkle tree structure to ensure compatibility with contract"""
         if not submission["nodes"]:
             logger.error("No merkle nodes in submission")
             return False
-    
-        if len(submission["nodes"]) == 1:
-            node = submission["nodes"][0]
-            if node["height"] != 0:
-                logger.warning(f"Single node should have height 0, found {node['height']}. Auto-fixing...")
-                node["height"] = 0
-    
-        elif len(submission["nodes"]) > 1:
-            nodes = sorted(submission["nodes"], key=lambda n: n["height"])
-        
-            heights = [n["height"] for n in nodes]
-            if len(heights) != len(set(heights)):
-                logger.error("Duplicate heights in merkle tree")
+        for node in submission["nodes"]:
+            if node["height"] < 0:
+                logger.error("Negative height in merkle tree")
                 return False
-        
-            if heights != list(range(min(heights), max(heights) + 1)):
-                logger.warning("Non-consecutive heights in merkle tree")
-                for i, node in enumerate(submission["nodes"]):
-                    node["height"] = i
-                logger.info("Auto-fixed merkle tree heights to be consecutive")
-    
-        logger.info("Merkle tree structure validated successfully")
         return True
     
     def simplify_crypto_data(self, data):
@@ -1042,6 +1017,7 @@ class OGDataUploader:
         max_retries = 5
         current_retry = 0
         last_error = None
+        length_mode = "segments"  # Coba dengan length dalam segmen terlebih dahulu
 
         logger.info(f"{Fore.YELLOW} Step 2: Preparing Registration Transaction{Fore.RESET}")
 
@@ -1097,6 +1073,14 @@ class OGDataUploader:
                 else:
                     tags_bytes = b''
         
+                # Coba length dalam jumlah chunk atau byte jika gagal dengan segmen
+                if length_mode == "chunks":
+                    submission["length"] = submission["num_chunks"]
+                    logger.info(f"Retrying with length in chunks: {submission['length']}")
+                elif length_mode == "bytes":
+                    submission["length"] = submission["num_bytes"]
+                    logger.info(f"Retrying with length in bytes: {submission['length']}")
+        
                 contract_submission = [
                     submission["length"],
                     tags_bytes,
@@ -1104,9 +1088,9 @@ class OGDataUploader:
                 ]
         
                 logger.info(f"Contract submission format: [uint256, bytes, [bytes32, uint256][]]")
-                logger.info(f"Parameters: length={contract_submission[0]}, tags={submission['tags']}, nodes_count={len(contract_submission[2])}")
+                logger.info(f"Parameters: length={contract_submission[0]} {length_mode}, tags={submission['tags']}, nodes_count={len(contract_submission[2])}")
         
-                gas_limit = 100000
+                gas_limit = 200000 if file_size_bytes > 256 else 100000
                 try:
                     gas_estimate = self.contract.functions.submit(contract_submission).estimate_gas({
                         'from': self.account.address,
@@ -1140,9 +1124,9 @@ class OGDataUploader:
         
                 logger.info(f"Signing transaction...")
                 signed_tx = self.account.sign_transaction(tx)
-            
+        
                 time.sleep(5)
-            
+        
                 tx_hash = self.w3.eth.send_raw_transaction(signed_tx.rawTransaction)
                 tx_hash_hex = tx_hash.hex()
         
@@ -1174,7 +1158,7 @@ class OGDataUploader:
                                 logger.warning(f"Error checking transaction status: {tx_err}")
                     
                         receipt = self.w3.eth.get_transaction_receipt(tx_hash)
-                    
+                
                         if receipt is None:
                             check_interval = min(base_check_interval + (wait_time // 30) * 5, 30)
                             logger.info(f"Waiting for transaction confirmation... ({wait_time}s / {max_wait}s)")
@@ -1194,7 +1178,7 @@ class OGDataUploader:
                                 try:
                                     latest_block = self.w3.eth.block_number
                                     start_block = max(0, latest_block - 10)
-                                
+                            
                                     logger.info(f"Checking recent blocks ({start_block}-{latest_block}) for our transaction...")
                                     for block_num in range(start_block, latest_block + 1):
                                         block = self.w3.eth.get_block(block_num, full_transactions=True)
@@ -1203,26 +1187,26 @@ class OGDataUploader:
                                                 logger.info(f"Found transaction from our account in block {block_num}: {tx.hash.hex()}")
                                 except Exception as block_err:
                                     logger.warning(f"Error checking recent blocks: {block_err}")
-                                
+                            
                                 if wait_time > 150:
                                     if self.check_and_handle_stuck_transaction(tx_hash, wait_time):
                                         logger.warning("Transaction not found after extended period, breaking to retry")
                                         break
-                    
+                
                         check_interval = min(base_check_interval + (wait_time // 30) * 5, 20)
                         time.sleep(check_interval)
                         wait_time += check_interval
-            
+        
                 if receipt and receipt.get('blockNumber'):
                     confirmation_wait = 0
                     max_confirmation_wait = 60
-                
+            
                     while confirmation_wait < max_confirmation_wait:
                         try:
                             current_block = self.w3.eth.block_number
                             tx_block = receipt.get('blockNumber')
                             confirmations = current_block - tx_block + 1
-                        
+                    
                             if confirmations >= 2:
                                 logger.info(f"Transaction confirmed with {confirmations} confirmations")
                                 break
@@ -1234,13 +1218,13 @@ class OGDataUploader:
                             logger.warning(f"Error checking confirmations: {conf_err}")
                             time.sleep(10)
                             confirmation_wait += 10
-            
+        
                 if receipt:
                     if receipt.get('status') == 1:
                         block_number = receipt.get('blockNumber')
                         gas_used = receipt.get('gasUsed')
                         actual_gas_fee = self.w3.from_wei(gas_used * gas_price, 'ether')
-                
+            
                         logger.info(f"Upload complete! Transaction successful in block #{block_number}")
                         logger.info(f"Gas used: {gas_used} ({(gas_used/gas_limit)*100:.1f}% of limit)")
                         logger.info(f"Actual gas fee: {actual_gas_fee:.18f} 0G")
@@ -1248,11 +1232,11 @@ class OGDataUploader:
                         logger.info(f"Total fee paid: {actual_gas_fee + storage_fee:.12f} 0G")
                         logger.info(f"Root hash: {submission.get('root_hash')}")
                         logger.info(f"{Fore.MAGENTA}✓ Data successfully uploaded and registered on-chain!{Fore.RESET}")
-                
+            
                         if 'file_path' in submission and os.path.exists(submission['file_path']):
                             logger.info(f"Removing uploaded file to save space")
                             os.remove(submission['file_path'])
-                
+            
                         return receipt
                     else:
                         tx_block = receipt.get('blockNumber')
@@ -1260,9 +1244,10 @@ class OGDataUploader:
                         logger.error(f"{Fore.RED}✗ Transaction failed on-chain. Status: {receipt.get('status')}{Fore.RESET}")
                         logger.error(f"Gas used: {gas_used} ({(gas_used/gas_limit)*100:.1f}% of limit)")
                         logger.error(f"Block number: {tx_block}")
-                
+            
                         if gas_used >= gas_limit * 0.95:
                             logger.warning("Transaction likely failed due to out of gas. Will increase gas limit next time.")
+                            gas_limit = int(gas_limit * 1.2)
                         elif gas_used < gas_limit * 0.5:
                             logger.warning("Transaction used less than half of gas limit, likely reverted by contract.")
                             try:
@@ -1270,19 +1255,19 @@ class OGDataUploader:
                             except Exception as call_err:
                                 error_msg = str(call_err)
                                 logger.error(f"Transaction reverted with: {error_msg}")
-                            
+                        
                                 if "execution reverted" in error_msg.lower():
                                     if "mempool is full" in error_msg.lower():
                                         logger.warning("Contract rejected due to mempool being full. Waiting before retry...")
                                         time.sleep(random.randint(45, 90))
                                     elif "invalid merkle" in error_msg.lower():
                                         logger.error("Contract rejected due to invalid Merkle tree structure.")
-                                        if current_retry < max_retries - 1:
-                                            logger.info("Adjusting Merkle tree for next attempt...")
-                                            for node in submission["nodes"]:
-                                                if node["height"] > 0:
-                                                    node["height"] -= 1
-                    
+                                        # Coba length dalam chunks atau byte pada retry berikutnya
+                                        if length_mode == "segments":
+                                            length_mode = "chunks"
+                                        elif length_mode == "chunks":
+                                            length_mode = "bytes"
+                
                         post_failure_delay = random.randint(15, 30)
                         logger.info(f"Waiting {post_failure_delay} seconds after transaction failure before retry...")
                         time.sleep(post_failure_delay)
@@ -1300,7 +1285,7 @@ class OGDataUploader:
                             logger.warning("Transaction not found in node.")
                     except Exception as tx_err:
                         logger.warning(f"Error getting transaction details: {tx_err}")
-                
+            
                     if not self.retry_with_new_rpc():
                         logger.info("Could not switch RPC, waiting before next attempt...")
                         time.sleep(random.randint(30, 60))
@@ -1412,39 +1397,41 @@ class OGDataUploader:
             return None
 
     def fetch_news_from_x(self):
-        """Fetch recent posts from X related to AI or Crypto"""
+        """Fetch recent posts from X related to AI, Crypto, or other topics"""
         try:
             logger.info("Fetching recent posts from X...")
-            # Untuk mengakses X API, Anda memerlukan API key. Di sini kita menggunakan pendekatan sederhana dengan scraping atau API publik.
-            # Catatan: Anda perlu mengatur autentikasi API X di .env (bearer token atau OAuth).
-            # Untuk contoh ini, kita gunakan data dummy karena autentikasi tidak disediakan.
-            
-            # Contoh menggunakan API X (dengan library seperti tweepy atau requests)
-            # Anda perlu mengatur BEARER_TOKEN di .env
+        
             bearer_token = os.getenv("X_BEARER_TOKEN")
             if not bearer_token:
-                logger.warning("No X Bearer Token provided, using dummy data")
-                dummy_posts = [
-                    {"text": "AI is transforming the crypto space! #AI #Crypto", "created_at": datetime.now().isoformat()},
-                    {"text": "New blockchain project using AI for smart contracts. #Blockchain #AI", "created_at": datetime.now().isoformat()}
-                ]
-            else:
-                url = "https://api.twitter.com/2/tweets/search/recent"
-                headers = {"Authorization": f"Bearer {bearer_token}"}
-                params = {
-                    "query": "(AI OR Crypto OR Blockchain) -is:retweet lang:en",
-                    "max_results": 5,
-                    "tweet.fields": "created_at"
-                }
-                response = requests.get(url, headers=headers, params=params, timeout=30)
-                response.raise_for_status()
-                dummy_posts = response.json().get('data', [])
+                logger.error("No X Bearer Token provided. Please set X_BEARER_TOKEN in .env file.")
+                logger.info("To get X_BEARER_TOKEN, follow these steps:")
+                logger.info("1. Go to https://developer.x.com/ and sign up/log in.")
+                logger.info("2. Create a new project and app in the Developer Portal.")
+                logger.info("3. Enable Read access for API v2.")
+                logger.info("4. Copy the Bearer Token from your app's dashboard.")
+                logger.info("5. Add to .env file: X_BEARER_TOKEN=your_bearer_token_here")
+                return None
+        
+            url = "https://api.twitter.com/2/tweets/search/recent"
+            headers = {"Authorization": f"Bearer {bearer_token}"}
+            params = {
+                "query": "(AI OR Testnet OR Bitcoin OR Binance OR Crypto OR Blockchain OR Airdrop OR DeFi) -is:retweet lang:en",
+                "max_results": 5,
+                "tweet.fields": "created_at"
+            }
+            response = requests.get(url, headers=headers, params=params, timeout=30)
+            response.raise_for_status()
+        
+            data = response.json().get('data', [])
+            if not data:
+                logger.warning("No recent tweets found for the given query")
+                return None
 
             structured_data = {
                 'timestamp': datetime.now().isoformat(),
                 'data_source': "x_news",
                 'collection_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                'posts': dummy_posts
+                'posts': [{"text": tweet["text"], "created_at": tweet["created_at"]} for tweet in data]
             }
             return structured_data
         except Exception as e:
@@ -1455,21 +1442,30 @@ class OGDataUploader:
         """Fetch a small image (e.g., a thumbnail) for upload"""
         try:
             logger.info("Fetching a small image for upload...")
-            # Contoh: Mengunduh gambar kecil dari URL publik
-            # Ganti dengan URL gambar kecil yang sesuai (<256 byte)
-            image_url = "https://via.placeholder.com/50.jpg"  # Gambar placeholder 50x50 piksel
-            response = requests.get(image_url, timeout=30)
-            response.raise_for_status()
+            max_attempts = 5
+            for attempt in range(max_attempts):
+                # Gunakan picsum.photos dengan ukuran 50x50 untuk gambar kecil
+                random_id = random.randint(1, 1000)
+                image_url = f"https://picsum.photos/50/50?random={random_id}"
+                headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
             
-            image_data = response.content
-            image_size = len(image_data)
+                response = requests.get(image_url, headers=headers, timeout=10)
+                response.raise_for_status()
             
-            if image_size > 256:
-                logger.warning(f"Image size ({image_size} bytes) exceeds 256 bytes, skipping...")
-                return None
+                image_data = response.content
+                image_size = len(image_data)
             
-            logger.info(f"Image fetched successfully: {image_size} bytes")
-            return image_data
+                if image_size <= 256:
+                    logger.info(f"Image fetched successfully: {image_size} bytes")
+                    return image_data
+                else:
+                    logger.warning(f"Image size ({image_size} bytes) exceeds 256 bytes, retrying... ({attempt+1}/{max_attempts})")
+                    if attempt == max_attempts - 1:
+                        logger.error("Failed to fetch image under 256 bytes after max attempts")
+                        return None
+                    time.sleep(3)  # Jeda sebelum mencoba lagi
+        
+            return None
         except Exception as e:
             logger.error(f"Error fetching image: {e}")
             return None
@@ -1480,62 +1476,68 @@ class OGDataUploader:
             rotate_logs()
             clean_old_data_files(days=1)
             self.setup_web3_provider()
-        
+    
             if not self.verify_wallet_connection():
                 logger.error("Wallet connection failed, cannot proceed with upload")
                 return
-        
+    
             network = self.config.get("network", "turbo").lower()
             logger.info(f"Configured to use '{network}' network")
-        
+    
             # Pilih sumber data secara acak (50:50 antara JSON dan lainnya)
             data_choice = random.choice(["json", "other"])
-            
+            data_type = None
+            filepath = None
+        
             if data_choice == "json":
+                data_type = "crypto_prices"
                 logger.info("Fetching crypto price data from CoinGecko...")
                 data = self.fetch_crypto_prices()
                 if data:
                     simplified_data = self.simplify_crypto_data(data)
                     optimized_data = self.optimize_data_for_blockchain(simplified_data)
-                    filepath = self.save_data_to_file(optimized_data, "crypto_prices")
+                    filepath = self.save_data_to_file(optimized_data, data_type)
             else:
                 # Pilih antara gambar atau berita X
                 sub_choice = random.choice(["image", "x_news"])
                 if sub_choice == "image":
+                    data_type = "image"
                     logger.info("Fetching a small image for upload...")
                     image_data = self.fetch_small_image()
                     if image_data:
-                        filepath = self.save_data_to_file(image_data, "image")
-                    else:
-                        filepath = None
+                        filepath = self.save_data_to_file(image_data, data_type)
                 else:
+                    data_type = "x_news"
                     logger.info("Fetching news from X...")
                     news_data = self.fetch_news_from_x()
                     if news_data:
                         optimized_data = self.optimize_data_for_blockchain(news_data)
-                        filepath = self.save_data_to_file(optimized_data, "x_news")
-                    else:
-                        filepath = None
+                        filepath = self.save_data_to_file(optimized_data, data_type)
 
             if filepath:
+                logger.info(f"Selected data type: {data_type}")
                 logger.info(f"Preparing submission for {filepath}...")
                 submission = self.implement_data_chunking_strategy(filepath)
 
                 if submission:
                     if self.validate_submission_against_contract(submission) and self.validate_merkle_tree_structure(submission):
-                        logger.info("Submitting data to contract...")
+                        logger.info(f"Submitting {data_type} data to contract...")
                         receipt = self.submit_data_to_contract(submission)
                         if receipt:
-                            logger.info(f"{Fore.GREEN}✅ Data upload successful!{Style.RESET_ALL}")
+                            logger.info(f"{Fore.GREEN}✅ {data_type.capitalize()} data upload successful!{Style.RESET_ALL}")
+                            # Pastikan file dihapus setelah diunggah
+                            if os.path.exists(filepath):
+                                logger.info(f"Removing uploaded file: {filepath}")
+                                os.remove(filepath)
                         else:
-                            logger.error(f"{Fore.RED}❌ Failed to submit data to contract{Style.RESET_ALL}")
+                            logger.error(f"{Fore.RED}❌ Failed to submit {data_type} data to contract{Style.RESET_ALL}")
                     else:
                         logger.warning("Submission validation failed")
                 else:
                     logger.error("Failed to prepare submission")
             else:
-                logger.error("No data to upload")
-                
+                logger.error(f"No {data_type} data to upload")
+            
         except Exception as e:
             logger.error(f"Error in hourly update process: {str(e)}")
             logger.debug(traceback.format_exc())
@@ -1548,18 +1550,32 @@ def main():
         print(f"\n{Fore.CYAN}Running initial test update...{Style.RESET_ALL}")
         uploader.process_hourly_update()
         
-        def schedule_random_interval():
-            delay = random.randint(1900, 5000)
-            logger.info(f"Next update in {delay // 60} minutes")
-            time.sleep(delay)
-            uploader.process_hourly_update()
-            
+        # Setup scheduler dengan interval acak 30-90 menit
         scheduler = BlockingScheduler()
-        scheduler.add_job(schedule_random_interval, 'interval', seconds=0)
-        scheduler.start()
+        # Tambahkan job dengan interval awal 0 detik, lalu atur ulang interval di dalam job
+        scheduler.add_job(
+            lambda: uploader.process_hourly_update(), 
+            'interval', 
+            seconds=0,  # Akan diatur ulang di dalam job
+            id='random_update_job',
+            max_instances=1
+        )
+        
+        def schedule_random_interval(scheduler, uploader):
+            delay = random.randint(500, 800)  # 30-90 menit
+            logger.info(f"Next update in {delay // 60} minutes")
+            scheduler.modify_job('random_update_job', next_run_time=datetime.now() + timedelta(seconds=delay))
+            uploader.process_hourly_update()
+            # Jadwalkan ulang setelah selesai
+            scheduler.modify_job('random_update_job', next_run_time=datetime.now() + timedelta(seconds=delay))
+        
+        # Mulai scheduler dengan job pertama
+        scheduler.add_job(lambda: schedule_random_interval(scheduler, uploader), 'date', run_date=datetime.now())
         
         print(f"\n{Fore.GREEN}Starting scheduler with random intervals (30-90 minutes)...{Style.RESET_ALL}")
         print(f"{Fore.YELLOW}Press Ctrl+C to exit{Style.RESET_ALL}")
+        scheduler.start()
+        
     except KeyboardInterrupt:
         print(f"\n{Fore.YELLOW}Program interrupted by user{Style.RESET_ALL}")
     except Exception as e:
