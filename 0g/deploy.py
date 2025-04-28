@@ -24,22 +24,13 @@ except Exception as e:
 # ======================== Constants ========================
 CONFIG = {
     "RPC_URLS": [
-        "https://evm-rpc.0g.testnet.node75.org",
         "https://rpc.ankr.com/0g_newton",
-        "https://evmrpc-testnet.0g.ai",
-        "https://0g-json-rpc-public.originstake.com",
-        "https://0g-rpc-evm01.validatorvn.com",
-        "https://og-testnet-jsonrpc.itrocket.net",
-        "https://0g-evmrpc.zstake.xyz/",
-        "https://0g-rpc.murphynode.net",
-        "https://0g-api.murphynode.net",
-        "https://0g-evm-rpc.murphynode.net",
-        "https://evm-0g.winnode.xyz"
+        "https://evmrpc-testnet.0g.ai"
     ],
     "GAS_MULTIPLIER": 1.01,
-    "MAX_PRIORITY_GWEI": 5,
+    "MAX_PRIORITY_GWEI": 4,
     "GAS_MIN_GWEI": 3.5,
-    "GAS_MAX_GWEI": 10,
+    "GAS_MAX_GWEI": 7,
     "GAS_RESET_GWEI": 5.0,
     "RPC_TIMEOUT": 21,  # detik
     "RPC_RETRY_DELAY": 10,  # detik
@@ -323,7 +314,7 @@ def estimate_gas(w3, contract_func, sender):
     """Generic function for gas estimation with fallback to defaults"""
     try:
         gas_estimate = contract_func.estimate_gas({'from': sender})
-        return int(gas_estimate * 1.02)  # 10% buffer
+        return int(gas_estimate * 1.01)  # 10% buffer
     except Exception as e:
         default_gas = 100000
         print_warning(f"⚠️ Estimasi gas failed: {str(e)}. Used default: {default_gas}")
@@ -680,7 +671,7 @@ async def deploy_contract(w3, current_rpc, contract_type, contract_name, private
     gas_limit = 100000
     try:
         estimated_gas = w3.eth.estimate_gas({"from": wallet_address, "data": contract_data["bytecode"]})
-        gas_limit = int(estimated_gas * 1.0022)  # 5-10% buffer
+        gas_limit = int(estimated_gas * 1.01)  # 5-10% buffer
         print_info(f"⛽ Estimated gas: {Fore.YELLOW}{estimated_gas}{Style.RESET_ALL} -> Add 5-10% boosting -> final {Fore.YELLOW}gas is {gas_limit}{Style.RESET_ALL}")
     except Exception as e:
         print_warning(f"⚠️ Could not estimate gas: {str(e)}")
@@ -736,7 +727,7 @@ async def deploy_contract(w3, current_rpc, contract_type, contract_name, private
         print_info(f"📨 Transaction explorer TXiD: {Fore.CYAN} {w3.to_hex(tx_hash)} {Style.RESET_ALL}")
 
         print_warning(f"⏳ Waiting for transaction confirmation...")
-        tx_receipt = wait_for_transaction_completion(w3, tx_hash, timeout=210)
+        tx_receipt = wait_for_transaction_completion(w3, tx_hash, timeout=150)
 
         if tx_receipt and tx_receipt.status == 1:
             contract_address = tx_receipt.contractAddress
@@ -824,7 +815,7 @@ def save_deployment_records(deployments):
 async def wait_with_progress(hours, message="Waiting"):
     """Wait for specified hours with progress updates."""
     seconds = int(hours * 3600)
-    update_interval = 2025  # progress every 33 menit
+    update_interval = 900  # progress every 15 menit
 
     print(f"\n{Fore.YELLOW}⏳ {message} for approximately {hours:.1f} hours...{Style.RESET_ALL}")
 
@@ -926,8 +917,8 @@ async def main():
     print(f"   Chain ID: {chain_id} {Fore.MAGENTA}0G-Newton-Testnet {Style.RESET_ALL}")
     print(f"   Connected to RPC: {Fore.GREEN}{w3.provider.endpoint_uri}{Style.RESET_ALL}")
 
-    # Get the total number of contracts to deploy 10
-    total_contracts_per_wallet = 10
+    # Get the total number of contracts to deploy 15
+    total_contracts_per_wallet = 15
     total_contracts = len(valid_wallets) * total_contracts_per_wallet
 
     print(f"🚀{Fore.YELLOW} Will deploy {total_contracts} contracts total ({total_contracts_per_wallet} per wallet){Style.RESET_ALL}")
@@ -1021,7 +1012,7 @@ async def main():
 
         if cycle < total_contracts_per_wallet - 1:
             # Random wait time between 3-4 hours
-            wait_hours = random.uniform(3.0, 4.0)
+            wait_hours = random.uniform(0.4, 2.0)
             await wait_with_progress(wait_hours,f"Completed cycle {cycle+1}/{total_contracts_per_wallet}. Waiting for next cycle",)
 
     if deployments:
