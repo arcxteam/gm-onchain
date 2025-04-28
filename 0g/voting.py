@@ -15,20 +15,20 @@ load_dotenv()
 
 # ======================== Configuration ========================
 CONFIG = {
-    "RPC_URLS": os.getenv("RPC_URLS","https://rpc.ankr.com/0g_newton,https://evmrpc-testnet.0g.ai",).split(","),
-    "CONTRACT_ADDRESS": os.getenv("CONTRACT_ADDRESS", "0x90723fb8FC109096c69BDb73E801989807E7C81F"),
+    "RPC_URLS": os.getenv("RPC_URLS","https://evmrpc-testnet.0g.ai,https://rpc.ankr.com/0g_newton",).split(","),
+    "CONTRACT_ADDRESS": os.getenv("CONTRACT_ADDRESS", "0xb606EDE1F2c3923527E4628ca794C01986D45c14"),
     "PRIVATE_KEY_FILE": os.path.join(os.path.dirname(__file__), "private_keys.txt"),
     "ENV_FILE": ".env",
     "MAX_RETRIES": 5,
-    "GAS_MULTIPLIER": 1.0022,
-    "MAX_PRIORITY_GWEI": 4,
-    "GAS_LIMIT": 80000,
-    "GAS_MIN_GWEI": 3.5,
-    "GAS_MAX_GWEI": 10.1,
+    "GAS_MULTIPLIER": 1.1,
+    "MAX_PRIORITY_GWEI": 2.5,
+    "GAS_LIMIT": 200000,
+    "GAS_MIN_GWEI": 2.5,
+    "GAS_MAX_GWEI": 7.0,
     "GAS_RESET_GWEI": 5.0,
     "COOLDOWN": {"SUCCESS": (10, 30), "ERROR": (30, 60)},
-    "WALLET_SWITCH_DELAY": (120, 480),  # Short delay wallet secons
-    "CYCLE_COMPLETE_DELAY": (3600, 7200), # Long delay all wallets use secons
+    "WALLET_SWITCH_DELAY": (60, 150),  # Short delay wallet secons
+    "CYCLE_COMPLETE_DELAY": (200, 300), # Long delay all wallets use secons
     "RPC_TIMEOUT": 15,  # detik
     "RPC_RETRY_DELAY": 8,  # detik
 }
@@ -350,7 +350,7 @@ class VoteScheduler:
         """Reset gas price to reasonable initial value after too many retries"""
         if isinstance(self.gas_price, dict):
             self.gas_price["maxFeePerGas"] = self.web3.to_wei(CONFIG["GAS_RESET_GWEI"], "gwei")
-            self.gas_price["maxPriorityFeePerGas"] = self.web3.to_wei(1, "gwei")
+            self.gas_price["maxPriorityFeePerGas"] = self.web3.to_wei(3, "gwei")
             print(f"⚠️ Gas price was reset to value (EIP-1559)")
         else:
             self.gas_price = self.web3.to_wei(CONFIG["GAS_RESET_GWEI"], "gwei")
@@ -390,7 +390,7 @@ class VoteScheduler:
     def estimate_gas(self, sender):
         try:
             gas_estimate = self.contract.functions.Vote().estimate_gas({"from": sender})
-            return int(gas_estimate * 1.0022)  # Add 5-10% buffer
+            return int(gas_estimate * 1.3)  # Add 5-10% buffer
         except Exception as e:
             print(f"⚠️ Gas estimation failed: {str(e)}. Using safe default.")
             return CONFIG["GAS_LIMIT"]
@@ -401,8 +401,8 @@ class VoteScheduler:
             gas_limit = self.estimate_gas(sender)
             print(f"🚀 Estimated gas usage: {Fore.MAGENTA}{gas_limit}{Fore.RESET}")
 
-            # Vote 80% and VoteWithMessage 20% (0.8 & 0.2)
-            vote_type = "Vote" if random.random() < 0.7 else "VoteWithMessage"
+            # Vote 50% and VoteWithMessage 50%
+            vote_type = "Vote" if random.random() < 0.6 else "VoteWithMessage"
 
             tx = {
                 "from": sender,
@@ -416,7 +416,7 @@ class VoteScheduler:
                 tx["data"] = self.contract.encodeABI(fn_name="Vote", args=[])
                 print(f"🔵 Vote dApps transaction prepared")
             else:
-                messages = ["0G is AI layer-1", "Vote Eco", "VotingDapps", "Storage-Og", "0G-DA", "0G-Node", "deAIOS",  "data availability", "Gravity", "0Gmorning", "VoteDapps", "AI-agent"]
+                messages = ["ORO AI", "Zer0 Dex", "Ora", "Bagel", "Eliza OS", "Mintair", "Socrates AI", "Pond",  "Fraction-AI", "AI Arena", "Gaimin", "Alliance DAO", "DAO-AI", "Conft"]
                 message = random.choice(messages)
                 tx["data"] = self.contract.encodeABI(
                     fn_name="VoteWithMessage", args=[message])
@@ -464,7 +464,7 @@ class VoteScheduler:
 
         
         elif any(msg in error_message.lower() for msg in ["fee too low", "underpriced"]):
-            return self.increase_gas_price(tx, 1.01, "Transaction fees too low")
+            return self.increase_gas_price(tx, 1.1, "Transaction fees too low")
         
         # Mempool full error
         elif "mempool is full" in error_message.lower():
@@ -475,20 +475,20 @@ class VoteScheduler:
                 # If can't switch RPC, wait longer and retry with higher gas
                 time.sleep(CONFIG["COOLDOWN"]["ERROR"][0])
                 if isinstance(self.gas_price, dict):
-                    self.gas_price["maxFeePerGas"] = int(self.gas_price["maxFeePerGas"] * 1.01)
-                    self.gas_price["maxPriorityFeePerGas"] = int(self.gas_price["maxPriorityFeePerGas"] * 1.01)
+                    self.gas_price["maxFeePerGas"] = int(self.gas_price["maxFeePerGas"] * 1.1)
+                    self.gas_price["maxPriorityFeePerGas"] = int(self.gas_price["maxPriorityFeePerGas"] * 1.1)
                     tx["maxFeePerGas"] = self.gas_price["maxFeePerGas"]
                     tx["maxPriorityFeePerGas"] = self.gas_price["maxPriorityFeePerGas"]
                 else:
-                    self.gas_price = int(self.gas_price * 1.01)
+                    self.gas_price = int(self.gas_price * 1.1)
                     tx["gasPrice"] = self.gas_price
-                return self.increase_gas_price(tx, 1.01, "Mempool full")
+                return self.increase_gas_price(tx, 1.1, "Mempool full")
                 return tx, True
 
         else:
             if isinstance(self.gas_price, dict):
-                self.gas_price["maxFeePerGas"] = int(self.gas_price["maxFeePerGas"] * 1.01)
-                self.gas_price["maxPriorityFeePerGas"] = int(self.gas_price["maxPriorityFeePerGas"] * 1.01)
+                self.gas_price["maxFeePerGas"] = int(self.gas_price["maxFeePerGas"] * 1.1)
+                self.gas_price["maxPriorityFeePerGas"] = int(self.gas_price["maxPriorityFeePerGas"] * 1.1)
 
                 tx["maxFeePerGas"] = self.gas_price["maxFeePerGas"]
                 tx["maxPriorityFeePerGas"] = self.gas_price["maxPriorityFeePerGas"]
@@ -496,7 +496,7 @@ class VoteScheduler:
                 new_max_fee_gwei = self.web3.from_wei(self.gas_price["maxFeePerGas"], "gwei")
                 print(f"🥶 Increased gas price for retry: {new_max_fee_gwei:.6f} Gwei")
             else:
-                self.gas_price = int(self.gas_price * 1.01)
+                self.gas_price = int(self.gas_price * 1.1)
                 tx["gasPrice"] = self.gas_price
                 new_gas_gwei = self.web3.from_wei(self.gas_price, "gwei")
                 print(f"🥶 Increased gas price for retry: {new_gas_gwei:.6f} Gwei")
@@ -550,7 +550,7 @@ class VoteScheduler:
                 print(f"⌛ Waiting for transaction to onchain...")
                 try:
                     tx_receipt = self.web3.eth.wait_for_transaction_receipt(
-                        receipt, timeout=250)
+                        receipt, timeout=150)
                     if tx_receipt.status == 1:
                         print(f"{Fore.GREEN}😎 Transaction successfully onchain!{Style.RESET_ALL}")
                     else:
