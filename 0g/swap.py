@@ -28,36 +28,36 @@ MESSAGES = {
 CONFIG = {
     "RPC_URLS": os.getenv(
         "RPC_URLS",
-        "https://16600.rpc.thirdweb.com,https://evmrpc-testnet.0g.ai,https://evm-rpc.0g.testnet.node75.org,https://rpc.ankr.com/0g_newton"
+        "https://evmrpc-testnet.0g.ai,https://rpc.ankr.com/0g_newton"
     ).split(","),
     "PRIVATE_KEY_FILE": os.path.join(os.path.dirname(__file__), "private_keys.txt"),
     "ENV_FILE": ".env",
     "MAX_RETRIES": 5,
-    "GAS_MULTIPLIER": 1.3,
-    "MAX_PRIORITY_GWEI": 2.5, # EIP1559
+    "GAS_MULTIPLIER": 1.1,
+    "MAX_PRIORITY_GWEI": 2.2, # EIP1559
     "GAS_LIMIT": 250000,
-    "COOLDOWN": {"SUCCESS": (15, 120), "ERROR": (30, 180)}, # detik bang
-    "WALLET_SWITCH_DELAY": (160, 580), # detik
-    "CYCLE_COMPLETE_DELAY": (3600, 7200), # detik
-    "TRANSACTIONS_PER_WALLET": (3, 10), # tx per wallet random
-    "SWAP_AMOUNT_USDT": (5, 10), # swap saldo
-    "SWAP_AMOUNT_ETH": (0.002, 0.005),
-    "SWAP_AMOUNT_BTC": (0.0002, 0.0005),
-    "GAS_MIN_GWEI": 2.5,
-    "GAS_MAX_GWEI": 20, # Legacy mode
+    "COOLDOWN": {"SUCCESS": (20, 60), "ERROR": (20, 60)}, # detik bang
+    "WALLET_SWITCH_DELAY": (100, 200), # detik
+    "CYCLE_COMPLETE_DELAY": (2000, 3000), # detik
+    "TRANSACTIONS_PER_WALLET": (15, 60), # tx per wallet random
+    "SWAP_AMOUNT_USDT": (10, 30), # swap saldo
+    "SWAP_AMOUNT_ETH": (0.003, 0.005),
+    "SWAP_AMOUNT_BTC": (0.0003, 0.0005),
+    "GAS_MIN_GWEI": 2.2,
+    "GAS_MAX_GWEI": 10.0, # Legacy mode
     "GAS_RESET_GWEI": 5,
-    "RPC_TIMEOUT": 14,  # detik
+    "RPC_TIMEOUT": 15,  # detik
     "RPC_RETRY_DELAY": 10,  # detik
 }
 
-CHAIN_SYMBOLS = {16600: "A0GI"}
+CHAIN_SYMBOLS = {80087: "0G"}
 
 # ================= Contract Addresses ===================
 TOKEN_ADDRESSES = {
-    "ROUTER": "0xD86b764618c6E3C078845BE3c3fCe50CE9535Da7",
-    "USDT": "0x9A87C2412d500343c073E5Ae5394E3bE3874F76b",
-    "ETH": "0xce830D0905e0f7A9b300401729761579c5FB6bd6",
-    "BTC": "0x1e0d871472973c562650e991ed8006549f8cbefc",
+    "ROUTER": "0x16a811adc55A99b4456F62c54F12D3561559a268",
+    "USDT": "0xA8F030218d7c26869CADd46C5F10129E635cD565",
+    "ETH": "0x2619090fcfDB99a8CCF51c76C9467F7375040eeb",
+    "BTC": "0x6dc29491a8396Bd52376b4f6dA1f3E889C16cA85",
 }
 
 # ==================== ABIs ========================
@@ -166,7 +166,7 @@ def validate_rpc_urls(urls):
     
     if not valid_urls:
         print_error("Tidak ada RPC URL valid ditemukan. Menggunakan default.")
-        return ["https://evmrpc-testnet.0g.ai", "https://16600.rpc.thirdweb.com"]
+        return ["https://evmrpc-testnet.0g.ai"]
     
     return valid_urls
     
@@ -474,7 +474,7 @@ class OGSwapper:
                 balance_wei = self.web3.eth.get_balance(address)
                 balance_eth = self.web3.from_wei(balance_wei, "ether")
                 chain_id = self.web3.eth.chain_id
-                token_name = CHAIN_SYMBOLS.get(chain_id, "A0GI")
+                token_name = CHAIN_SYMBOLS.get(chain_id, "0G")
             
                 print_info(MESSAGES["BALANCE_CHECK"].format(token_name, balance_eth))
 
@@ -508,7 +508,7 @@ class OGSwapper:
         """Fungsi generik untuk estimasi gas dengan fallback ke default"""
         try:
             gas_estimate = contract_func.estimate_gas({'from': sender})
-            return int(gas_estimate * 1.05)  # 10% buffer
+            return int(gas_estimate * 1.1)  # 10% buffer
         except Exception as e:
             default_gas = CONFIG["GAS_LIMIT"]
             print(f"⚠️  Estimasi gas gagal: {Fore.RED}{str(e)}{Fore.RESET} Cek nilai default: {default_gas}")
@@ -574,7 +574,7 @@ class OGSwapper:
             params = {
                 'tokenIn': Web3.to_checksum_address(TOKEN_ADDRESSES[token_in]),
                 'tokenOut': Web3.to_checksum_address(TOKEN_ADDRESSES[token_out]),
-                'fee': 3000,
+                'fee': 15000,
                 'recipient': sender,
                 'deadline': deadline,
                 'amountIn': amount,
@@ -627,14 +627,14 @@ class OGSwapper:
             print(f"⚠️  Error mendapatkan nonce: {Fore.RED}{str(e)}{Fore.RESET}")
             return self.web3.eth.get_transaction_count(address, "latest")
 
-    def wait_for_transaction_completion(self, tx_hash, timeout=210):
+    def wait_for_transaction_completion(self, tx_hash, timeout=150):
         """Menunggu transaksi selesai dengan penanganan error yang lebih baik"""
         print_info(MESSAGES["WAITING_TX"].format(tx_hash))
         start_time = time.time()
     
         last_error_time = 0  # Untuk menghindari spam log error
         rpc_switched = False # Track apakah sudah switch RPC
-        check_interval = 6   # Interval cek status transaksi detik
+        check_interval = 10   # Interval cek status transaksi detik
     
         while time.time() - start_time < timeout:
             try:
@@ -665,7 +665,7 @@ class OGSwapper:
 
             time.sleep(check_interval)
     
-        print_warning(f"⏱️ Timeout menunggu transaksi {tx_hash}.")
+        print(f"⏱️ Timeout menunggu transaksi {tx_hash}.")
         return None
 
     def reset_pending_transactions(self, address, private_key):
@@ -691,10 +691,10 @@ class OGSwapper:
                     }
 
                     if isinstance(self.gas_price, dict):
-                        tx["maxFeePerGas"] = self.web3.to_wei(20, "gwei")
+                        tx["maxFeePerGas"] = self.web3.to_wei(10, "gwei")
                         tx["maxPriorityFeePerGas"] = self.web3.to_wei(5, "gwei")
                     else:
-                        tx["gasPrice"] = self.web3.to_wei(20, "gwei")
+                        tx["gasPrice"] = self.web3.to_wei(10, "gwei")
 
                     try:
                         signed = self.web3.eth.account.sign_transaction(tx, private_key)
@@ -765,12 +765,12 @@ class OGSwapper:
             else:
                 max_fee_gwei = self.web3.from_wei(self.gas_price, "gwei")
                 
-            if max_fee_gwei < 10:
-                factor = 1.3
-            elif max_fee_gwei < 20:
+            if max_fee_gwei < 6:
                 factor = 1.2
-            else:
+            elif max_fee_gwei < 15:
                 factor = 1.1
+            else:
+                factor = 1.055
                 
             return self.increase_gas_price(tx, factor, "Error tidak dikenal")
             
@@ -786,7 +786,7 @@ class OGSwapper:
             self.gas_price["maxFeePerGas"] = new_max_fee
             self.gas_price["maxPriorityFeePerGas"] = min(
                 int(self.gas_price["maxPriorityFeePerGas"] * factor),
-                self.web3.to_wei(10, "gwei")
+                self.web3.to_wei(5, "gwei")
             )
             
             tx["maxFeePerGas"] = self.gas_price["maxFeePerGas"]
@@ -814,7 +814,7 @@ class OGSwapper:
             else gas_price["maxFeePerGas"]
         )
         cost_eth = self.web3.from_wei(cost_wei, "ether")
-        print_info(f"📊 Gas terpakai: {gas_used} | Biaya: {cost_eth:.8f} {CHAIN_SYMBOLS.get(self.web3.eth.chain_id, 'A0GI')}")
+        print_info(f"📊 Gas terpakai: {gas_used} | Biaya: {cost_eth:.8f} {CHAIN_SYMBOLS.get(self.web3.eth.chain_id, '0G')}")
 
     def send_transaction(self, tx, private_key, tx_type=""):
         """Kirim transaksi dengan penanganan error yang lebih baik"""
@@ -884,7 +884,7 @@ class OGSwapper:
                         tx["maxPriorityFeePerGas"] = self.gas_price["maxPriorityFeePerGas"]
             
                 updated_tx, should_retry = self.handle_tx_error(e, tx)
-                if not should_retry or updated_tx is None:  # Tambahkan pengecekan is None
+                if not should_retry or updated_tx is None:
                     retries = 0
                     print_error(f"❌ Transaksi tidak dapat dikirim: {str(e)}")
                     return None
@@ -923,7 +923,7 @@ class OGSwapper:
                 return None
         
         # Delay untuk memastikan konfirmasi detik
-        sleep_seconds(random.randint(7, 21), "Memastikan konfirmasi approval")
+        sleep_seconds(random.randint(7, 15), "Memastikan konfirmasi approval")
         return approval_receipt
     
     def perform_token_swap(self, token_in, token_out, amount_in_wei, sender_address, private_key):
@@ -1067,7 +1067,7 @@ class OGSwapper:
             
             # Delay antara transaksi dalam wallet yang sama deitk
             if i < tx_count - 1:
-                delay = random.randint(30, 120)
+                delay = random.randint(90, 300)
                 sleep_seconds(delay, "Menunggu untuk transaksi berikutnya")
         
         sleep_seconds(5, "Memperbarui saldo")
@@ -1076,7 +1076,7 @@ class OGSwapper:
         gas_used = initial_balance - final_balance
         gas_cost_eth = self.web3.from_wei(gas_used, "ether")
         chain_id = self.web3.eth.chain_id
-        token_symbol = CHAIN_SYMBOLS.get(chain_id, "A0GI")
+        token_symbol = CHAIN_SYMBOLS.get(chain_id, "0G")
         
         print_info(f"💰 Ringkasan wallet {wallet_num}: {success_count}/{tx_count} transaksi berhasil")
         print_info(f"⛽ Biaya gas total: {gas_cost_eth:.8f} {token_symbol}")
@@ -1146,7 +1146,7 @@ class OGSwapper:
 # ======================== Main Function ========================
 def main():
     global_retries = 3
-    retry_delay = 65  # dtik
+    retry_delay = 60  # dtik
     
     while global_retries > 0:
         try:
