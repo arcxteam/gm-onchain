@@ -24,8 +24,15 @@ except Exception as e:
 # ======================== Constants ========================
 CONFIG = {
     "RPC_URLS": [
+        "https://0g.bangcode.id",
         "https://rpc.ankr.com/0g_newton",
-        "https://evmrpc-testnet.0g.ai"
+        "https://evmrpc-testnet.0g.ai",
+        "https://0g-testnet-rpc.astrostake.xyz",
+        "https://0g-galileo-evmrpc.corenodehq.xyz",
+        "https://lightnode-json-rpc-0g.grandvalleys.com",
+        "https://0g-evm.zstake.xyz",
+        "https://0g-evm.maouam.nodelab.my.id",
+        "https://0g.json-rpc.cryptomolot.com"
     ],
     "GAS_MULTIPLIER": 1.01,
     "MAX_PRIORITY_GWEI": 4,
@@ -38,7 +45,7 @@ CONFIG = {
     "WALLET_SWITCH_DELAY_MAX": 300,  # detik
 }
 
-CHAIN_SYMBOLS = {80087: "0G"}
+CHAIN_SYMBOLS = {16601: "0G"}
 
 # ======================== Helper Functions ========================
 def print_info(message):
