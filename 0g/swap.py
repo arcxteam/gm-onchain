@@ -28,13 +28,13 @@ MESSAGES = {
 CONFIG = {
     "RPC_URLS": os.getenv(
         "RPC_URLS",
-        "https://evmrpc-testnet.0g.ai,https://rpc.ankr.com/0g_newton"
+        "https://evmrpc-testnet.0g.ai,https://0g-testnet-rpc.astrostake.xyz,https://rpc.ankr.com/0g_newton"
     ).split(","),
     "PRIVATE_KEY_FILE": os.path.join(os.path.dirname(__file__), "private_keys.txt"),
     "ENV_FILE": ".env",
     "MAX_RETRIES": 5,
-    "GAS_MULTIPLIER": 1.1,
-    "MAX_PRIORITY_GWEI": 2.2, # EIP1559
+    "GAS_MULTIPLIER": 0.33,
+    "MAX_PRIORITY_GWEI": 1.03, # EIP1559
     "GAS_LIMIT": 250000,
     "COOLDOWN": {"SUCCESS": (20, 60), "ERROR": (20, 60)}, # detik bang
     "WALLET_SWITCH_DELAY": (100, 200), # detik
@@ -43,21 +43,21 @@ CONFIG = {
     "SWAP_AMOUNT_USDT": (10, 30), # swap saldo
     "SWAP_AMOUNT_ETH": (0.003, 0.005),
     "SWAP_AMOUNT_BTC": (0.0003, 0.0005),
-    "GAS_MIN_GWEI": 2.2,
-    "GAS_MAX_GWEI": 10.0, # Legacy mode
-    "GAS_RESET_GWEI": 5,
+    "GAS_MIN_GWEI": 1.03,
+    "GAS_MAX_GWEI": 2.0, # Legacy mode
+    "GAS_RESET_GWEI": 3,
     "RPC_TIMEOUT": 15,  # detik
     "RPC_RETRY_DELAY": 10,  # detik
 }
 
-CHAIN_SYMBOLS = {80087: "0G"}
+CHAIN_SYMBOLS = {16601: "0G"}
 
 # ================= Contract Addresses ===================
 TOKEN_ADDRESSES = {
-    "ROUTER": "0x16a811adc55A99b4456F62c54F12D3561559a268",
-    "USDT": "0xA8F030218d7c26869CADd46C5F10129E635cD565",
-    "ETH": "0x2619090fcfDB99a8CCF51c76C9467F7375040eeb",
-    "BTC": "0x6dc29491a8396Bd52376b4f6dA1f3E889C16cA85",
+    "ROUTER": "0xb95B5953FF8ee5D5d9818CdbEfE363ff2191318c",
+    "USDT": "0x3eC8A8705bE1D5ca90066b37ba62c4183B024ebf",
+    "ETH": "0x0fE9B43625fA7EdD663aDcEC0728DD635e4AbF7c",
+    "BTC": "0x36f6414FF1df609214dDAbA71c84f18bcf00F67d",
 }
 
 # ==================== ABIs ========================
@@ -403,7 +403,7 @@ class OGSwapper:
             # coba gas dari legacy
             current = self.web3.eth.gas_price
 
-            if current <= self.web3.to_wei(0.5, "gwei"):
+            if current <= self.web3.to_wei(0.33, "gwei"):
                 print(f"⚠️  Gas price terlalu rendah ({self.web3.from_wei(current, 'gwei'):.2f} Gwei), menggunakan default")
                 gas_price = self.web3.to_wei(CONFIG["GAS_MIN_GWEI"], "gwei")
             else:
@@ -508,7 +508,7 @@ class OGSwapper:
         """Fungsi generik untuk estimasi gas dengan fallback ke default"""
         try:
             gas_estimate = contract_func.estimate_gas({'from': sender})
-            return int(gas_estimate * 1.1)  # 10% buffer
+            return int(gas_estimate * 0.35)  # 4% buffer
         except Exception as e:
             default_gas = CONFIG["GAS_LIMIT"]
             print(f"⚠️  Estimasi gas gagal: {Fore.RED}{str(e)}{Fore.RESET} Cek nilai default: {default_gas}")
@@ -633,7 +633,7 @@ class OGSwapper:
         start_time = time.time()
     
         last_error_time = 0  # Untuk menghindari spam log error
-        rpc_switched = False # Track apakah sudah switch RPC
+        rpc_switched = True # False/True Track apakah sudah switch RPC
         check_interval = 10   # Interval cek status transaksi detik
     
         while time.time() - start_time < timeout:
@@ -691,10 +691,10 @@ class OGSwapper:
                     }
 
                     if isinstance(self.gas_price, dict):
-                        tx["maxFeePerGas"] = self.web3.to_wei(10, "gwei")
-                        tx["maxPriorityFeePerGas"] = self.web3.to_wei(5, "gwei")
+                        tx["maxFeePerGas"] = self.web3.to_wei(2, "gwei")
+                        tx["maxPriorityFeePerGas"] = self.web3.to_wei(2, "gwei")
                     else:
-                        tx["gasPrice"] = self.web3.to_wei(10, "gwei")
+                        tx["gasPrice"] = self.web3.to_wei(2, "gwei")
 
                     try:
                         signed = self.web3.eth.account.sign_transaction(tx, private_key)
@@ -730,7 +730,7 @@ class OGSwapper:
                 return None, False
         
         elif any(msg in error_message for msg in ["fee too low", "underpriced"]):
-            return self.increase_gas_price(tx, 1.3, "Fee transaksi terlalu rendah")
+            return self.increase_gas_price(tx, 0.5, "Fee transaksi terlalu rendah")
  
         elif "already known" in error_message or "already exists" in error_message:
             print_warning(f"⚠️ Transaksi sudah diproses. Menunggu konfirmasi...")
@@ -749,7 +749,7 @@ class OGSwapper:
             else:
                 # Jika tidak bisa beralih RPC, tunggu dan naikkan gas
                 sleep_seconds(CONFIG["COOLDOWN"]["ERROR"][1], "Menunggu mempool tidak penuh")
-                return self.increase_gas_price(tx, 2.0, "Mempool penuh")
+                return self.increase_gas_price(tx, 0.85, "Mempool penuh")
         
         # RPC error (429 too many requests, etc)
         elif "429" in error_message or "too many requests" in error_message:
@@ -765,12 +765,12 @@ class OGSwapper:
             else:
                 max_fee_gwei = self.web3.from_wei(self.gas_price, "gwei")
                 
-            if max_fee_gwei < 6:
-                factor = 1.2
-            elif max_fee_gwei < 15:
-                factor = 1.1
+            if max_fee_gwei < 2:
+                factor = 0.3
+            elif max_fee_gwei < 4:
+                factor = 0.6
             else:
-                factor = 1.055
+                factor = 0.8
                 
             return self.increase_gas_price(tx, factor, "Error tidak dikenal")
             
