@@ -34,10 +34,10 @@ CONFIG = {
         "https://0g-evm.maouam.nodelab.my.id",
         "https://0g.json-rpc.cryptomolot.com"
     ],
-    "GAS_MULTIPLIER": 1.01,
-    "MAX_PRIORITY_GWEI": 4,
-    "GAS_MIN_GWEI": 3.5,
-    "GAS_MAX_GWEI": 7,
+    "GAS_MULTIPLIER": 0.65,
+    "MAX_PRIORITY_GWEI": 2.2,
+    "GAS_MIN_GWEI": 2.0,
+    "GAS_MAX_GWEI": 5,
     "GAS_RESET_GWEI": 5.0,
     "RPC_TIMEOUT": 21,  # detik
     "RPC_RETRY_DELAY": 10,  # detik
@@ -297,10 +297,10 @@ def reset_pending_transactions(w3, address, private_key):
 
                 gas_price = update_gas_price(w3)
                 if isinstance(gas_price, dict):
-                    tx["maxFeePerGas"] = w3.to_wei(2, "gwei")
+                    tx["maxFeePerGas"] = w3.to_wei(1, "gwei")
                     tx["maxPriorityFeePerGas"] = w3.to_wei(3, "gwei")
                 else:
-                    tx["gasPrice"] = w3.to_wei(5, "gwei")
+                    tx["gasPrice"] = w3.to_wei(1.5, "gwei")
 
                 try:
                     signed = w3.eth.account.sign_transaction(tx, private_key)
@@ -321,13 +321,13 @@ def estimate_gas(w3, contract_func, sender):
     """Generic function for gas estimation with fallback to defaults"""
     try:
         gas_estimate = contract_func.estimate_gas({'from': sender})
-        return int(gas_estimate * 1.01)  # 10% buffer
+        return int(gas_estimate * 0.51)  # 5% buffer
     except Exception as e:
-        default_gas = 100000
+        default_gas = 200000
         print_warning(f"⚠️ Estimasi gas failed: {str(e)}. Used default: {default_gas}")
         return default_gas
 
-def wait_for_transaction_completion(w3, tx_hash, timeout=210, current_rpc=None):
+def wait_for_transaction_completion(w3, tx_hash, timeout=150, current_rpc=None):
     """Waiting for transactions to complete with better error handling"""
     print_info(f"⏳ Waiting transaction {tx_hash} terconfirmed...")
     start_time = time.time()
@@ -675,11 +675,11 @@ async def deploy_contract(w3, current_rpc, contract_type, contract_name, private
     nonce = get_safe_nonce(w3, wallet_address)
 
     # Estimasi gas Default
-    gas_limit = 100000
+    gas_limit = 200000
     try:
         estimated_gas = w3.eth.estimate_gas({"from": wallet_address, "data": contract_data["bytecode"]})
-        gas_limit = int(estimated_gas * 1.01)  # 5-10% buffer
-        print_info(f"⛽ Estimated gas: {Fore.YELLOW}{estimated_gas}{Style.RESET_ALL} -> Add 5-10% boosting -> final {Fore.YELLOW}gas is {gas_limit}{Style.RESET_ALL}")
+        gas_limit = int(estimated_gas * 0.5)  # 5% buffer
+        print_info(f"⛽ Estimated gas: {Fore.YELLOW}{estimated_gas}{Style.RESET_ALL} -> Add 5% boosting -> final {Fore.YELLOW}gas is {gas_limit}{Style.RESET_ALL}")
     except Exception as e:
         print_warning(f"⚠️ Could not estimate gas: {str(e)}")
         print_info(f"⛽ Using default gas limit: {Fore.YELLOW}{gas_limit}{Style.RESET_ALL}")
@@ -908,10 +908,10 @@ async def main():
 
             print(f"   Wallet {idx+1}: {Fore.CYAN}{short_address(wallet_address)}{Style.RESET_ALL} | Balance: {Fore.YELLOW}{balance_eth:.6f} 0G{Style.RESET_ALL}")
 
-            if balance_eth >= 0.05:
+            if balance_eth >= 0.01:
                 valid_wallets.append(private_key)
             else:
-                print_warning(f"   ⚠️ Low balance (< 0.05 0G) for wallet {short_address(wallet_address)}, may not be sufficient for gas")
+                print_warning(f"   ⚠️ Low balance (< 0.01 0G) for wallet {short_address(wallet_address)}, may not be sufficient for gas")
         except Exception as e:
             print_error(f"   ❌ Error checking wallet {idx+1}: {str(e)}")
 
