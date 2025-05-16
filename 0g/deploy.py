@@ -34,11 +34,11 @@ CONFIG = {
         "https://0g-evm.maouam.nodelab.my.id",
         "https://0g.json-rpc.cryptomolot.com"
     ],
-    "GAS_MULTIPLIER": 0.65,
-    "MAX_PRIORITY_GWEI": 2.2,
-    "GAS_MIN_GWEI": 2.0,
-    "GAS_MAX_GWEI": 5,
-    "GAS_RESET_GWEI": 5.0,
+    "GAS_MULTIPLIER": 0.5,
+    "MAX_PRIORITY_GWEI": 1.05,
+    "GAS_MIN_GWEI": 1.05,
+    "GAS_MAX_GWEI": 2.5,
+    "GAS_RESET_GWEI": 3.5,
     "RPC_TIMEOUT": 21,  # detik
     "RPC_RETRY_DELAY": 10,  # detik
     "WALLET_SWITCH_DELAY_MIN": 120,  # detik
@@ -321,9 +321,9 @@ def estimate_gas(w3, contract_func, sender):
     """Generic function for gas estimation with fallback to defaults"""
     try:
         gas_estimate = contract_func.estimate_gas({'from': sender})
-        return int(gas_estimate * 0.51)  # 5% buffer
+        return int(gas_estimate * 1.03)  # 5% buffer
     except Exception as e:
-        default_gas = 200000
+        default_gas = 300000
         print_warning(f"⚠️ Estimasi gas failed: {str(e)}. Used default: {default_gas}")
         return default_gas
 
@@ -675,11 +675,11 @@ async def deploy_contract(w3, current_rpc, contract_type, contract_name, private
     nonce = get_safe_nonce(w3, wallet_address)
 
     # Estimasi gas Default
-    gas_limit = 200000
+    gas_limit = 300000
     try:
         estimated_gas = w3.eth.estimate_gas({"from": wallet_address, "data": contract_data["bytecode"]})
-        gas_limit = int(estimated_gas * 0.5)  # 5% buffer
-        print_info(f"⛽ Estimated gas: {Fore.YELLOW}{estimated_gas}{Style.RESET_ALL} -> Add 5% boosting -> final {Fore.YELLOW}gas is {gas_limit}{Style.RESET_ALL}")
+        gas_limit = int(estimated_gas * 1.05)  # 5% buffer
+        print_info(f"⛽ Estimated gas: {Fore.YELLOW}{estimated_gas}{Style.RESET_ALL} -> Add 5-10% boosting -> final {Fore.YELLOW}gas is {gas_limit}{Style.RESET_ALL}")
     except Exception as e:
         print_warning(f"⚠️ Could not estimate gas: {str(e)}")
         print_info(f"⛽ Using default gas limit: {Fore.YELLOW}{gas_limit}{Style.RESET_ALL}")
