@@ -20,15 +20,15 @@ CONFIG = {
     "PRIVATE_KEY_FILE": os.path.join(os.path.dirname(__file__), "private_keys.txt"),
     "ENV_FILE": ".env",
     "MAX_RETRIES": 5,
-    "GAS_MULTIPLIER": 0.2,
+    "GAS_MULTIPLIER": 0.155,
     "MAX_PRIORITY_GWEI": 1.05,
-    "GAS_LIMIT": 200000,
-    "GAS_MIN_GWEI": 1.0,
-    "GAS_MAX_GWEI": 2.0,
-    "GAS_RESET_GWEI": 3.0,
+    "GAS_LIMIT": 180000,
+    "GAS_MIN_GWEI": 1.05,
+    "GAS_MAX_GWEI": 2.05,
+    "GAS_RESET_GWEI": 3.05,
     "COOLDOWN": {"SUCCESS": (10, 30), "ERROR": (30, 60)},
-    "WALLET_SWITCH_DELAY": (60, 150),  # Short delay wallet secons
-    "CYCLE_COMPLETE_DELAY": (200, 300), # Long delay all wallets use secons
+    "WALLET_SWITCH_DELAY": (60, 150),  # Short delay wallet seconsd
+    "CYCLE_COMPLETE_DELAY": (200, 300), # Long delay all wallets use seconsd
     "RPC_TIMEOUT": 15,  # detik
     "RPC_RETRY_DELAY": 8,  # detik
 }
@@ -381,7 +381,6 @@ class VoteScheduler:
             if "429" in str(e) or "too many requests" in str(e).lower():
                 print(f"⚠️ RPC error while checking balance. Switching RPC...")
                 if self.switch_rpc():
-                    # Try again with new RPC
                     return self.get_wallet_balance(address)
 
             log_error(f"Error getting balance: {str(e)}")
@@ -389,12 +388,13 @@ class VoteScheduler:
 
     def estimate_gas(self, sender):
         try:
-            gas_estimate = self.contract.functions.Vote().estimate_gas({"from": sender})
-            return int(gas_estimate * 0.3)  # Add 5-10% buffer
+            estimate_gas = self.contract.functions.Vote().estimate_gas({"from": sender})
+            final_gas = int(estimate_gas * 0.95) # add boosting
+            return max(final_gas, CONFIG["GAS_LIMIT"])
         except Exception as e:
             print(f"⚠️ Gas estimation failed: {str(e)}. Using safe default.")
             return CONFIG["GAS_LIMIT"]
-
+            
     def build_transaction(self, sender):
         try:
             nonce = self.web3.eth.get_transaction_count(sender, "pending")
