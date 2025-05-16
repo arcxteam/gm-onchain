@@ -507,8 +507,8 @@ class OGSwapper:
     def estimate_gas(self, contract_func, sender):
         """Fungsi generik untuk estimasi gas dengan fallback ke default"""
         try:
-            gas_estimate = contract_func.estimate_gas({'from': sender})
-            return int(gas_estimate * 0.35)  # 4% buffer
+            estimate_gas = contract_func.estimate_gas({'from': sender})
+            return int(estimate_gas * 1.05)  # 10% buffer
         except Exception as e:
             default_gas = CONFIG["GAS_LIMIT"]
             print(f"⚠️  Estimasi gas gagal: {Fore.RED}{str(e)}{Fore.RESET} Cek nilai default: {default_gas}")
