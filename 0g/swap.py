@@ -33,21 +33,22 @@ CONFIG = {
     "PRIVATE_KEY_FILE": os.path.join(os.path.dirname(__file__), "private_keys.txt"),
     "ENV_FILE": ".env",
     "MAX_RETRIES": 5,
-    "GAS_MULTIPLIER": 0.33,
-    "MAX_PRIORITY_GWEI": 1.03, # EIP1559
+    "GAS_MULTIPLIER": 0.3,
+    "MAX_PRIORITY_GWEI": 0.5, # EIP1559
     "GAS_LIMIT": 250000,
     "COOLDOWN": {"SUCCESS": (20, 60), "ERROR": (20, 60)}, # detik bang
     "WALLET_SWITCH_DELAY": (100, 200), # detik
-    "CYCLE_COMPLETE_DELAY": (2000, 3000), # detik
+    "CYCLE_COMPLETE_DELAY": (200, 500), # detik
     "TRANSACTIONS_PER_WALLET": (15, 60), # tx per wallet random
-    "SWAP_AMOUNT_USDT": (10, 30), # swap saldo
+    "SWAP_AMOUNT_USDT": (10, 20), # swap saldo
     "SWAP_AMOUNT_ETH": (0.003, 0.005),
     "SWAP_AMOUNT_BTC": (0.0003, 0.0005),
-    "GAS_MIN_GWEI": 1.03,
-    "GAS_MAX_GWEI": 2.0, # Legacy mode
-    "GAS_RESET_GWEI": 3,
+    "GAS_MIN_GWEI": 0.5,
+    "GAS_MAX_GWEI": 1.0, # Legacy mode
+    "GAS_RESET_GWEI": 2,
     "RPC_TIMEOUT": 15,  # detik
-    "RPC_RETRY_DELAY": 10,  # detik
+    "RPC_RETRY_DELAY": 15,  # detik
+    "DEBUG_PARAMETERS": False,  # False/True aktifkan param tuples
 }
 
 CHAIN_SYMBOLS = {16601: "0G"}
@@ -505,13 +506,15 @@ class OGSwapper:
         return 0
 
     def estimate_gas(self, contract_func, sender):
-        """Fungsi generik untuk estimasi gas dengan fallback ke default"""
         try:
             estimate_gas = contract_func.estimate_gas({'from': sender})
-            return int(estimate_gas * 1.05)  # 10% buffer
+            return int(estimate_gas * 1.033) # 10% boosting
         except Exception as e:
+            print_error(f"❌ Detail kegagalan estimasi gas: {str(e)}")
+            if 'SPL' in str(e):
+                print_error("❌ Transaksi gagal karena slippage protection. Periksa likuiditas pool atau tingkatkan amountOutMinimum.")
             default_gas = CONFIG["GAS_LIMIT"]
-            print(f"⚠️  Estimasi gas gagal: {Fore.RED}{str(e)}{Fore.RESET} Cek nilai default: {default_gas}")
+            print(f"⚠️ Estimasi gas gagal: {Fore.RED}{str(e)}{Fore.RESET} Cek nilai default: {default_gas}")
             return default_gas
 
     def build_transaction(self, to_address, data, sender, gas_limit, description=""):
@@ -574,14 +577,15 @@ class OGSwapper:
             params = {
                 'tokenIn': Web3.to_checksum_address(TOKEN_ADDRESSES[token_in]),
                 'tokenOut': Web3.to_checksum_address(TOKEN_ADDRESSES[token_out]),
-                'fee': 15000,
+                'fee': 3000,
                 'recipient': sender,
                 'deadline': deadline,
                 'amountIn': amount,
                 'amountOutMinimum': 0,
                 'sqrtPriceLimitX96': 0
             }
-
+            if CONFIG["DEBUG_PARAMETERS"]:
+                print_debug(f"📝 Parameter swap: {params}")
             gas_limit = self.estimate_gas(
                 self.router_contract.functions.exactInputSingle(params),
                 sender
@@ -645,6 +649,7 @@ class OGSwapper:
                         return receipt
                     else:
                         print_error(MESSAGES["TX_FAILED"])
+                        print_error(f"❌ Detail kegagalan: {receipt}")
                         return receipt
             except Exception as e:
                 current_time = time.time()
@@ -923,7 +928,7 @@ class OGSwapper:
                 return None
         
         # Delay untuk memastikan konfirmasi detik
-        sleep_seconds(random.randint(7, 15), "Memastikan konfirmasi approval")
+        sleep_seconds(random.randint(11, 21), "Memastikan konfirmasi approval")
         return approval_receipt
     
     def perform_token_swap(self, token_in, token_out, amount_in_wei, sender_address, private_key):
@@ -1036,51 +1041,48 @@ class OGSwapper:
         """Proses beberapa swap untuk satu wallet"""
         private_key = account["key"]
         address = account["address"]
-        
+    
         print(f"🔄 Menggunakan wallet {Fore.YELLOW}[{wallet_num}/{total_wallets}]{Fore.RESET} -> {Fore.YELLOW}{short_address(address)}{Fore.RESET}")
-        
+    
         tx_count = random.randint(CONFIG["TRANSACTIONS_PER_WALLET"][0], CONFIG["TRANSACTIONS_PER_WALLET"][1])
         print(f"📊 Merencanakan {Fore.MAGENTA}{tx_count} transaksi TXiD{Fore.RESET} untuk wallet ini")
 
         initial_balance = self.check_wallet_balance(address)
-
         success_count = 0
-        
-        swap_sequences = [
-            ("USDT", "BTC"),
-            ("USDT", "ETH"),
-            ("USDT", "BTC"),
-            ("USDT", "ETH"),
-        ]
-        
+    
+        # Daftar token yang tersedia
+        available_tokens = ["USDT", "ETH", "BTC"]
+    
         for i in range(tx_count):
             print(f"🔄 Transaksi {Fore.YELLOW}[{i+1}/{tx_count}]{Fore.RESET} untuk {Fore.YELLOW}[wallet {wallet_num}]{Fore.RESET}")
-            
-            swap_in, swap_out = swap_sequences[i % len(swap_sequences)]
-            
-            success = self.swap_token_to_token(private_key, swap_in, swap_out, wallet_num, total_wallets)
-            
+        
+            # Pilih token_in dan token_out secara acak, pastikan berbeda
+            token_in = random.choice(available_tokens)
+            token_out = random.choice([t for t in available_tokens if t != token_in])
+        
+            success = self.swap_token_to_token(private_key, token_in, token_out, wallet_num, total_wallets)
+        
             if success:
                 success_count += 1
             else:
                 print(f"⚠️  Transaksi {i+1} gagal, lanjut ke transaksi berikutnya")
-            
-            # Delay antara transaksi dalam wallet yang sama deitk
-            if i < tx_count - 1:
-                delay = random.randint(90, 300)
-                sleep_seconds(delay, "Menunggu untuk transaksi berikutnya")
         
-        sleep_seconds(5, "Memperbarui saldo")
+            # Delay antara transaksi dalam wallet yang sama
+            if i < tx_count - 1:
+                delay = random.randint(60, 300)
+                sleep_seconds(delay, "Menunggu untuk transaksi berikutnya")
+    
+        sleep_seconds(6, "Memperbarui saldo")
         final_balance = self.check_wallet_balance(address)
 
         gas_used = initial_balance - final_balance
         gas_cost_eth = self.web3.from_wei(gas_used, "ether")
         chain_id = self.web3.eth.chain_id
         token_symbol = CHAIN_SYMBOLS.get(chain_id, "0G")
-        
+    
         print_info(f"💰 Ringkasan wallet {wallet_num}: {success_count}/{tx_count} transaksi berhasil")
         print_info(f"⛽ Biaya gas total: {gas_cost_eth:.8f} {token_symbol}")
-        
+
         # delay wallet terakhir, terapkan delay panjang cek config
         if is_last_wallet:
             delay_seconds = random.randint(
