@@ -24,6 +24,12 @@ MAX_RETRIES = 3
 MIN_STAKE_AMOUNT = 0.101
 MAX_STAKE_AMOUNT = 0.122
 
+# CONFIG WRAPPING
+MIN_WRAP_ETH_AMOUNT = 1.0  # Minimal ETH untuk di-wrap
+MAX_WRAP_ETH_AMOUNT = 5.0  # Maksimal ETH untuk di-wrap
+MIN_WRAP_BTC_AMOUNT = 0.05  # Minimal BTC untuk di-wrap
+MAX_WRAP_BTC_AMOUNT = 0.15  # Maksimal BTC untuk di-wrap
+
 # CONFIG GLOBAL
 CONTINUOUS_RUNNING = True
 MAX_CYCLES = 9999
@@ -384,14 +390,16 @@ async def process_wallet(wallet, wallet_idx, cycle):
         # Step 1: Wrap ETH to WETH
         eth_balance = get_wallet_balance(web3, wallet.address, eth_contract)
         print(f"💰 Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} ETH balance: {Fore.YELLOW}{eth_balance:.6f}{Style.RESET_ALL}")
-        if eth_balance >= 10:
-            await deposit_token(web3, wallet, wallet_idx, eth_contract, ETH_TOKEN_ADDRESS, 10, weth_contract)
+        eth_to_wrap = random.uniform(MIN_WRAP_ETH_AMOUNT, min(MAX_WRAP_ETH_AMOUNT, eth_balance))
+        if eth_balance >= MIN_WRAP_ETH_AMOUNT:
+            await deposit_token(web3, wallet, wallet_idx, eth_contract, ETH_TOKEN_ADDRESS, eth_to_wrap, weth_contract)
 
         # Step 2: Wrap BTC to WBTC
         btc_balance = get_wallet_balance(web3, wallet.address, btc_contract)
         print(f"💰 Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} BTC balance: {Fore.YELLOW}{btc_balance:.6f}{Style.RESET_ALL}")
-        if btc_balance >= 0.2:
-            await deposit_token(web3, wallet, wallet_idx, btc_contract, BTC_TOKEN_ADDRESS, 0.2, wbtc_contract)
+        btc_to_wrap = random.uniform(MIN_WRAP_BTC_AMOUNT, min(MAX_WRAP_BTC_AMOUNT, btc_balance))
+        if btc_balance >= MIN_WRAP_BTC_AMOUNT:
+            await deposit_token(web3, wallet, wallet_idx, btc_contract, BTC_TOKEN_ADDRESS, btc_to_wrap, wbtc_contract)
 
         # Step 3: Stake WETH
         result_weth = await stake_token(web3, wallet, wallet_idx, weth_contract, "WETH")
