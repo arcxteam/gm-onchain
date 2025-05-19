@@ -13,52 +13,65 @@ init(autoreset=True)
 
 # ======================= CONFIG SECTION =======================
 # CONFIG TIME (in seconds)
-UNSTAKE_DELAY_MIN = 1000  # 16 mins
-UNSTAKE_DELAY_MAX = 2000  # 33 mins
+UNSTAKE_DELAY_MIN = 200  # 16 mins
+UNSTAKE_DELAY_MAX = 300  # 33 mins
 WALLET_INTERVAL_MIN = 200  # 3-4 mins
-WALLET_INTERVAL_MAX = 330  # 5 mins
-RETRY_DELAY = 33
-MAX_RETRIES = 3
+WALLET_INTERVAL_MAX = 300  # 5 mins
+RETRY_DELAY = 30
+MAX_RETRIES = 5
 
 # CONFIG STAKING
-MIN_STAKE_AMOUNT = 0.101
-MAX_STAKE_AMOUNT = 0.122
+MIN_STAKE_AMOUNT = 0.002
+MAX_STAKE_AMOUNT = 0.005
 
 # CONFIG WRAPPING
-MIN_WRAP_ETH_AMOUNT = 1.0  # Minimal ETH untuk di-wrap
-MAX_WRAP_ETH_AMOUNT = 5.0  # Maksimal ETH untuk di-wrap
-MIN_WRAP_BTC_AMOUNT = 0.05  # Minimal BTC untuk di-wrap
-MAX_WRAP_BTC_AMOUNT = 0.15  # Maksimal BTC untuk di-wrap
+MIN_WRAP_ETH_AMOUNT = 0.02  # Minimal ETH untuk di-wrap
+MAX_WRAP_ETH_AMOUNT = 0.05 # Maksimal ETH untuk di-wrap
+MIN_WRAP_BTC_AMOUNT = 0.002  # Minimal BTC untuk di-wrap
+MAX_WRAP_BTC_AMOUNT = 0.005  # Maksimal BTC untuk di-wrap
 
 # CONFIG GLOBAL
 CONTINUOUS_RUNNING = True
 MAX_CYCLES = 9999
 
 # CONFIG GAS
-GAS_LIMIT_STAKE = 88888
-GAS_LIMIT_UNSTAKE = 98888
-GAS_PRICE_MIN_GWEI = 50
-GAS_PRICE_MAX_GWEI = 52
+GAS_LIMIT_STAKE = 100000
+GAS_LIMIT_UNSTAKE = 130000
+GAS_PRICE_MIN_GWEI = 0.1
+GAS_PRICE_MAX_GWEI = 0.2
 USE_EIP1559 = True  # True/False EIP-1559 or legacy
 
 # CONFIG RPC & CONTRACT
-RPC_URLS = [
-    "https://rpc-galileo.0g.ai",  # Ganti dengan RPC URL 0G Galileo Testnet
-]
-EXPLORER_URL = "https://chainscan-galileo.0g.ai/tx/"
-WETH_ADDRESS = "0x1265ace75c199a531b7b1cd2a9666f434325d1e8"
-WBTC_ADDRESS = "0x15b1121c947d1806e32c4c00e41c60bdf1b35e26"
-ETH_TOKEN_ADDRESS = "0x...";  # Ganti dengan alamat token ERC20 ETH
-BTC_TOKEN_ADDRESS = "0x...";  # Ganti dengan alamat token ERC20 BTC
+RPC_URLS = os.getenv("RPC_URLS", "https://evmrpc-testnet.0g.ai,https://0g-testnet-rpc.astrostake.xyz,https://0g-evm.zstake.xyz").split(",")
+EXPLORER_URL = "https://chainscan-galileo.0g.ai/txs"
+WETH_ADDRESS = Web3.to_checksum_address("0x1265ace75c199a531b7b1cd2a9666f434325d1e8")
+WBTC_ADDRESS = Web3.to_checksum_address("0x15b1121c947d1806e32c4c00e41c60bdf1b35e26")
+ETH_TOKEN_ADDRESS = Web3.to_checksum_address("0x0fE9B43625fA7EdD663aDcEC0728DD635e4AbF7c")
+BTC_TOKEN_ADDRESS = Web3.to_checksum_address("0x36f6414FF1df609214dDAbA71c84f18bcf00F67d")
 
-# ABI (dari abi_weth.sol.txt)
-ABI = [...]  # Tempelkan ABI dari abi_weth.sol.txt di sini
+# ABI untuk WETH/WBTC
+ABI = [
+    {"inputs": [{"internalType": "address", "name": "spender", "type": "address"}, {"internalType": "uint256", "name": "value", "type": "uint256"}], "name": "approve", "outputs": [{"internalType": "bool", "name": "", "type": "bool"}], "stateMutability": "nonpayable", "type": "function"},
+    {"inputs": [{"internalType": "address", "name": "token", "type": "address"}, {"internalType": "uint256", "name": "amount", "type": "uint256"}], "name": "deposit", "outputs": [], "stateMutability": "nonpayable", "type": "function"},
+    {"inputs": [{"internalType": "address", "name": "token", "type": "address"}, {"internalType": "uint256", "name": "amount", "type": "uint256"}], "name": "withdraw", "outputs": [], "stateMutability": "nonpayable", "type": "function"},
+    {"inputs": [{"internalType": "uint256", "name": "amount", "type": "uint256"}], "name": "stake", "outputs": [], "stateMutability": "nonpayable", "type": "function"},
+    {"inputs": [{"internalType": "uint256", "name": "amount", "type": "uint256"}], "name": "unstake", "outputs": [], "stateMutability": "nonpayable", "type": "function"},
+    {"inputs": [{"internalType": "address", "name": "user", "type": "address"}], "name": "getPendingReward", "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}], "stateMutability": "view", "type": "function"},
+    {"inputs": [{"internalType": "address", "name": "account", "type": "address"}], "name": "balanceOf", "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}], "stateMutability": "view", "type": "function"},
+    {"inputs": [{"internalType": "address", "name": "to", "type": "address"}, {"internalType": "uint256", "name": "value", "type": "uint256"}], "name": "transfer", "outputs": [{"internalType": "bool", "name": "", "type": "bool"}], "stateMutability": "nonpayable", "type": "function"}
+]
+
+# ABI untuk ETH/BTC
+TOKEN_ABI = [
+    {"inputs": [{"internalType": "address", "name": "_spender", "type": "address"}, {"internalType": "uint256", "name": "_value", "type": "uint256"}], "name": "approve", "outputs": [{"internalType": "bool", "name": "", "type": "bool"}], "stateMutability": "nonpayable", "type": "function"},
+    {"inputs": [{"internalType": "address", "name": "_owner", "type": "address"}], "name": "balanceOf", "outputs": [{"internalType": "uint256", "name": "balance", "type": "uint256"}], "stateMutability": "view", "type": "function"}
+]
 
 # Variables
 RPC_CACHE = None
 STAKE_TIMESTAMPS = {}
 
-# ======================= BANNER =======================
+# ======================= BANNER BANG =======================
 print(f"{Fore.GREEN}======================= WELCOME TO 0G GALILEO TESTNET ========================{Fore.RESET}")
 def print_welcome_message():
     welcome_banner = f"""
@@ -71,8 +84,8 @@ def print_welcome_message():
  ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝  ╚═══╝ ╚═════╝ ╚═════╝ ╚══════╝
 {Fore.RESET}
 {Fore.GREEN}========================================================================={Fore.RESET}
-{Fore.CYAN}        Welcome to 0G Galileo Testnet Staking Interface {Fore.RESET}
-{Fore.YELLOW}           - Adapted from MAGMA by Greyscope&Co -    {Fore.RESET}
+{Fore.CYAN}           Welcome to 0G-Gravity Onchain Testnet & Mainnet     {Fore.RESET}
+{Fore.YELLOW}         - CUANNODE By Greyscope&Co, Credit By Arcxteam -    {Fore.RESET}
 {Fore.GREEN}========================================================================={Fore.RESET}
 """
     print(welcome_banner)
@@ -151,7 +164,7 @@ def get_reasonable_gas_price(web3):
         return int(final_gas_price)
     except Exception as e:
         print(f"Error getting gas price: {e}. Using {Fore.GREEN}default.{Style.RESET_ALL}")
-        default_gwei = 51
+        default_gwei = 0.15
         return int(web3.to_wei(default_gwei, 'gwei'))
 
 def get_random_amount():
@@ -384,8 +397,8 @@ async def process_wallet(wallet, wallet_idx, cycle):
         # Initialize contracts
         weth_contract = web3.eth.contract(address=WETH_ADDRESS, abi=ABI)
         wbtc_contract = web3.eth.contract(address=WBTC_ADDRESS, abi=ABI)
-        eth_contract = web3.eth.contract(address=ETH_TOKEN_ADDRESS, abi=ABI)
-        btc_contract = web3.eth.contract(address=BTC_TOKEN_ADDRESS, abi=ABI)
+        eth_contract = web3.eth.contract(address=ETH_TOKEN_ADDRESS, abi=TOKEN_ABI)
+        btc_contract = web3.eth.contract(address=BTC_TOKEN_ADDRESS, abi=TOKEN_ABI)
 
         # Step 1: Wrap ETH to WETH
         eth_balance = get_wallet_balance(web3, wallet.address, eth_contract)
