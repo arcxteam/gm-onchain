@@ -17,6 +17,8 @@ UNSTAKE_DELAY_MIN = 200  # 16 mins
 UNSTAKE_DELAY_MAX = 300  # 33 mins
 WALLET_INTERVAL_MIN = 200  # 3-4 mins
 WALLET_INTERVAL_MAX = 300  # 5 mins
+STEP_DELAY_MIN = 10
+STEP_DELAY_MAX = 30
 RETRY_DELAY = 30
 MAX_RETRIES = 5
 
@@ -36,14 +38,14 @@ MAX_CYCLES = 9999
 
 # CONFIG GAS
 GAS_LIMIT_STAKE = 100000
-GAS_LIMIT_UNSTAKE = 130000
-GAS_PRICE_MIN_GWEI = 0.1
-GAS_PRICE_MAX_GWEI = 0.2
+GAS_LIMIT_UNSTAKE = 120000
+GAS_PRICE_MIN_GWEI = 0.07
+GAS_PRICE_MAX_GWEI = 0.15
 USE_EIP1559 = True  # True/False EIP-1559 or legacy
 
 # CONFIG RPC & CONTRACT
 RPC_URLS = os.getenv("RPC_URLS", "https://evmrpc-testnet.0g.ai,https://0g-testnet-rpc.astrostake.xyz,https://0g-evm.zstake.xyz").split(",")
-EXPLORER_URL = "https://chainscan-galileo.0g.ai/txs"
+EXPLORER_URL = "https://chainscan-galileo.0g.ai/txs/"
 WETH_ADDRESS = Web3.to_checksum_address("0x1265ace75c199a531b7b1cd2a9666f434325d1e8")
 WBTC_ADDRESS = Web3.to_checksum_address("0x15b1121c947d1806e32c4c00e41c60bdf1b35e26")
 ETH_TOKEN_ADDRESS = Web3.to_checksum_address("0x0fE9B43625fA7EdD663aDcEC0728DD635e4AbF7c")
@@ -63,8 +65,12 @@ ABI = [
 
 # ABI untuk ETH/BTC
 TOKEN_ABI = [
-    {"inputs": [{"internalType": "address", "name": "_spender", "type": "address"}, {"internalType": "uint256", "name": "_value", "type": "uint256"}], "name": "approve", "outputs": [{"internalType": "bool", "name": "", "type": "bool"}], "stateMutability": "nonpayable", "type": "function"},
-    {"inputs": [{"internalType": "address", "name": "_owner", "type": "address"}], "name": "balanceOf", "outputs": [{"internalType": "uint256", "name": "balance", "type": "uint256"}], "stateMutability": "view", "type": "function"}
+    {"inputs": [{"internalType": "address", "name": "_spender", "type": "address"}, {"internalType": "uint256", "name": "_value", "type": "uint256"}],
+     "name": "approve", "outputs": [{"internalType": "bool", "name": "", "type": "bool"}], "stateMutability": "nonpayable", "type": "function"},
+    {"inputs": [{"internalType": "address", "name": "_owner", "type": "address"}],
+     "name": "balanceOf", "outputs": [{"internalType": "uint256", "name": "balance", "type": "uint256"}], "stateMutability": "view", "type": "function"},
+    {"inputs": [{"internalType": "address", "name": "to", "type": "address"}, {"internalType": "uint256", "name": "value", "type": "uint256"}],
+     "name": "transfer", "outputs": [{"internalType": "bool", "name": "", "type": "bool"}], "stateMutability": "nonpayable", "type": "function"}
 ]
 
 # Variables
@@ -164,7 +170,7 @@ def get_reasonable_gas_price(web3):
         return int(final_gas_price)
     except Exception as e:
         print(f"Error getting gas price: {e}. Using {Fore.GREEN}default.{Style.RESET_ALL}")
-        default_gwei = 0.15
+        default_gwei = 0.101
         return int(web3.to_wei(default_gwei, 'gwei'))
 
 def get_random_amount():
@@ -185,6 +191,12 @@ async def deposit_token(web3, wallet, wallet_idx, token_contract, token_address,
         amount_wei = web3.to_wei(amount, 'ether')
         print(f"🔄 Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} depositing {amount:.6f} tokens to wrap...")
 
+        # Cek apakah kontrak dipause
+        is_paused = contract.functions.paused().call()
+        if is_paused:
+            print(f"❌ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} contract is paused, skipping deposit")
+            return False
+
         # Approve token contract to spend tokens
         approve_tx = token_contract.functions.approve(contract.address, amount_wei).build_transaction({
             'from': wallet.address,
@@ -193,29 +205,38 @@ async def deposit_token(web3, wallet, wallet_idx, token_contract, token_address,
             'gasPrice': get_reasonable_gas_price(web3)
         })
         signed_approve_tx = wallet.sign_transaction(approve_tx)
-        approve_tx_hash = await safe_send_transaction(web3, signed_approve_tx, wallet_idx)
+        approve_tx_hash = safe_send_transaction(web3, signed_approve_tx, wallet_idx)
         if not approve_tx_hash:
             print(f"❌ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} failed to approve token")
             return False
-        await web3.eth.wait_for_transaction_receipt(approve_tx_hash)
+        receipt = web3.eth.wait_for_transaction_receipt(approve_tx_hash)
+        if receipt.status != 1:
+            print(f"❌ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} approve transaction failed - Status: {receipt.status}")
+            return False
+        # Tambahkan delay setelah approve
+        delay = get_random_delay(7, 15)
+        await sleep_seconds(delay, wallet_idx)
 
         # Deposit token
         deposit_tx = contract.functions.deposit(token_address, amount_wei).build_transaction({
             'from': wallet.address,
             'nonce': web3.eth.get_transaction_count(wallet.address),
-            'gas': 200000,
+            'gas': 150000,
             'gasPrice': get_reasonable_gas_price(web3)
         })
         signed_deposit_tx = wallet.sign_transaction(deposit_tx)
-        deposit_tx_hash = await safe_send_transaction(web3, signed_deposit_tx, wallet_idx)
+        deposit_tx_hash = safe_send_transaction(web3, signed_deposit_tx, wallet_idx)
         if not deposit_tx_hash:
             print(f"❌ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} failed to deposit token")
             return False
 
-        receipt = await web3.eth.wait_for_transaction_receipt(deposit_tx_hash)
+        receipt = web3.eth.wait_for_transaction_receipt(deposit_tx_hash)
         if receipt.status != 1:
-            print(f"❌ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} deposit transaction failed")
+            print(f"❌ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} deposit transaction failed - Status: {receipt.status}")
             return False
+        # Tambahkan delay setelah deposit
+        delay = get_random_delay(7, 15)
+        await sleep_seconds(delay, wallet_idx)
 
         print(f"✅ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} successfully deposited {amount:.6f} tokens")
         return True
@@ -249,11 +270,17 @@ async def stake_token(web3, wallet, wallet_idx, contract, token_symbol):
             'gasPrice': get_reasonable_gas_price(web3)
         })
         signed_approve_tx = wallet.sign_transaction(approve_tx)
-        approve_tx_hash = await safe_send_transaction(web3, signed_approve_tx, wallet_idx)
+        approve_tx_hash = safe_send_transaction(web3, signed_approve_tx, wallet_idx)
         if not approve_tx_hash:
             print(f"❌ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} failed to approve {token_symbol}")
             return None
-        await web3.eth.wait_for_transaction_receipt(approve_tx_hash)
+        receipt = web3.eth.wait_for_transaction_receipt(approve_tx_hash)
+        if receipt.status != 1:
+            print(f"❌ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} approve transaction failed")
+            return None
+        # Tambahkan delay setelah approve
+        delay = get_random_delay(STEP_DELAY_MIN, STEP_DELAY_MAX)
+        await sleep_seconds(delay, wallet_idx)
 
         # Prepare staking transaction
         tx = contract.functions.stake(amount_wei).build_transaction({
@@ -266,7 +293,7 @@ async def stake_token(web3, wallet, wallet_idx, contract, token_symbol):
         # Sign and send transaction
         print(f"✅ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} sending stake transaction...")
         signed_tx = wallet.sign_transaction(tx)
-        tx_hash = await safe_send_transaction(web3, signed_tx, wallet_idx)
+        tx_hash = safe_send_transaction(web3, signed_tx, wallet_idx)
         
         if not tx_hash:
             print(f"❌ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} failed to send stake transaction")
@@ -284,6 +311,10 @@ async def stake_token(web3, wallet, wallet_idx, contract, token_symbol):
             print(f"❌ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} stake transaction {Fore.RED}failed{Style.RESET_ALL}")
             return None
         
+        # Tambahkan delay setelah stake berhasil
+        delay = get_random_delay(STEP_DELAY_MIN, STEP_DELAY_MAX)
+        await sleep_seconds(delay, wallet_idx)
+
         # Get new balance
         new_balance = get_wallet_balance(web3, wallet.address, contract)
         print(f"✅ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} {Fore.GREEN}STAKING was successful!{Style.RESET_ALL}")
@@ -327,7 +358,7 @@ async def unstake_token(web3, wallet, wallet_idx, contract, token_symbol):
         # Sign and send transaction
         print(f"✅ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} sending unstake transaction...")
         signed_tx = wallet.sign_transaction(tx)
-        tx_hash = await safe_send_transaction(web3, signed_tx, wallet_idx)
+        tx_hash = safe_send_transaction(web3, signed_tx, wallet_idx)
         
         if not tx_hash:
             print(f"❌ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} failed to send unstake transaction...")
@@ -345,6 +376,10 @@ async def unstake_token(web3, wallet, wallet_idx, contract, token_symbol):
             print(f"❌ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} unstake transaction failed...")
             return False
         
+        # Tambahkan delay setelah unstake berhasil
+        delay = get_random_delay(STEP_DELAY_MIN, STEP_DELAY_MAX)
+        await sleep_seconds(delay, wallet_idx)
+
         # Clear the stake timestamp record
         if wallet.address in STAKE_TIMESTAMPS:
             del STAKE_TIMESTAMPS[wallet.address]
@@ -361,7 +396,7 @@ async def unstake_token(web3, wallet, wallet_idx, contract, token_symbol):
         print(f"❌ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} {Fore.RED}UNSTAKE failed: {str(e)}{Style.RESET_ALL}")
         return False
 
-async def safe_send_transaction(web3, signed_tx, wallet_idx, retries=3):
+def safe_send_transaction(web3, signed_tx, wallet_idx, retries=3):
     """Send transaction with retries"""
     for i in range(retries):
         try:
@@ -379,9 +414,9 @@ async def safe_send_transaction(web3, signed_tx, wallet_idx, retries=3):
                 return None
                 
             if i < retries - 1:
-                wait_time = 3 * (i + 1)
+                wait_time = 5 * (i + 1)
                 print(f"Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} waiting {wait_time} seconds before {Fore.MAGENTA}RETRY...{Style.RESET_ALL}")
-                await asyncio.sleep(wait_time)
+                time.sleep(wait_time)
     
     print(f"{Fore.RED}🥵 Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} transaction ultimately failed after {retries} retries.{Style.RESET_ALL}")
     return None
@@ -406,6 +441,8 @@ async def process_wallet(wallet, wallet_idx, cycle):
         eth_to_wrap = random.uniform(MIN_WRAP_ETH_AMOUNT, min(MAX_WRAP_ETH_AMOUNT, eth_balance))
         if eth_balance >= MIN_WRAP_ETH_AMOUNT:
             await deposit_token(web3, wallet, wallet_idx, eth_contract, ETH_TOKEN_ADDRESS, eth_to_wrap, weth_contract)
+            delay = get_random_delay(STEP_DELAY_MIN, STEP_DELAY_MAX)
+            await sleep_seconds(delay, wallet_idx)
 
         # Step 2: Wrap BTC to WBTC
         btc_balance = get_wallet_balance(web3, wallet.address, btc_contract)
@@ -413,34 +450,48 @@ async def process_wallet(wallet, wallet_idx, cycle):
         btc_to_wrap = random.uniform(MIN_WRAP_BTC_AMOUNT, min(MAX_WRAP_BTC_AMOUNT, btc_balance))
         if btc_balance >= MIN_WRAP_BTC_AMOUNT:
             await deposit_token(web3, wallet, wallet_idx, btc_contract, BTC_TOKEN_ADDRESS, btc_to_wrap, wbtc_contract)
+            delay = get_random_delay(STEP_DELAY_MIN, STEP_DELAY_MAX)
+            await sleep_seconds(delay, wallet_idx)
 
         # Step 3: Stake WETH
         result_weth = await stake_token(web3, wallet, wallet_idx, weth_contract, "WETH")
         if not result_weth:
             print(f"❌ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} WETH staking failed, skipping this cycle")
+            delay = get_random_delay(STEP_DELAY_MIN, STEP_DELAY_MAX)
+            await sleep_seconds(delay, wallet_idx)
             return False
+        delay = get_random_delay(STEP_DELAY_MIN, STEP_DELAY_MAX)
+        await sleep_seconds(delay, wallet_idx)
 
         # Step 4: Stake WBTC
         result_wbtc = await stake_token(web3, wallet, wallet_idx, wbtc_contract, "WBTC")
         if not result_wbtc:
             print(f"❌ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} WBTC staking failed, skipping this cycle")
+            delay = get_random_delay(STEP_DELAY_MIN, STEP_DELAY_MAX)
+            await sleep_seconds(delay, wallet_idx)
             return False
+        delay = get_random_delay(STEP_DELAY_MIN, STEP_DELAY_MAX)
+        await sleep_seconds(delay, wallet_idx)
 
-        # Wait before unstaking with random time
+        # Step 5: Wait before unstaking
         unstake_delay = get_random_delay(UNSTAKE_DELAY_MIN, UNSTAKE_DELAY_MAX)
         print(f"⏳ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} waiting {unstake_delay} seconds before unstaking...")
         await sleep_seconds(unstake_delay, wallet_idx)
-        
-        # Step 5: Unstake WETH
+
+        # Step 6: Unstake WETH
         unstake_weth_success = await unstake_token(web3, wallet, wallet_idx, weth_contract, "WETH")
         if not unstake_weth_success:
             print(f"⚠️ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} WETH unstake failed")
+            delay = get_random_delay(STEP_DELAY_MIN, STEP_DELAY_MAX)
+            await sleep_seconds(delay, wallet_idx)
             return False
 
-        # Step 6: Unstake WBTC
+        # Step 7: Unstake WBTC
         unstake_wbtc_success = await unstake_token(web3, wallet, wallet_idx, wbtc_contract, "WBTC")
         if not unstake_wbtc_success:
             print(f"⚠️ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} WBTC unstake failed")
+            delay = get_random_delay(STEP_DELAY_MIN, STEP_DELAY_MAX)
+            await sleep_seconds(delay, wallet_idx)
             return False
 
         print(f"\n ✅ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} cycle {Fore.YELLOW}[{cycle}]{Fore.RESET} {Fore.GREEN}completed successfully!{Style.RESET_ALL}\n")
@@ -448,6 +499,8 @@ async def process_wallet(wallet, wallet_idx, cycle):
         
     except Exception as e:
         print(f"❌ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} cycle {Fore.YELLOW}[{cycle}]{Fore.RESET} failed: {str(e)}{Style.RESET_ALL}")
+        delay = get_random_delay(STEP_DELAY_MIN, STEP_DELAY_MAX)
+        await sleep_seconds(delay, wallet_idx)
         return False
     
 async def run_wallet_continuously(wallet, wallet_idx):
