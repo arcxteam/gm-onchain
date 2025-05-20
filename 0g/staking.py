@@ -24,13 +24,13 @@ MAX_RETRIES = 5
 
 # CONFIG STAKING
 MIN_STAKE_AMOUNT = 0.002
-MAX_STAKE_AMOUNT = 0.005
+MAX_STAKE_AMOUNT = 0.007
 
 # CONFIG WRAPPING
-MIN_WRAP_ETH_AMOUNT = 0.02  # Minimal ETH untuk di-wrap
-MAX_WRAP_ETH_AMOUNT = 0.05 # Maksimal ETH untuk di-wrap
-MIN_WRAP_BTC_AMOUNT = 0.002  # Minimal BTC untuk di-wrap
-MAX_WRAP_BTC_AMOUNT = 0.005  # Maksimal BTC untuk di-wrap
+MIN_WRAP_ETH_AMOUNT = 0.05  # Minimal ETH untuk di-wrap
+MAX_WRAP_ETH_AMOUNT = 0.1 # Maksimal ETH untuk di-wrap
+MIN_WRAP_BTC_AMOUNT = 0.003  # Minimal BTC untuk di-wrap
+MAX_WRAP_BTC_AMOUNT = 0.007  # Maksimal BTC untuk di-wrap
 
 # CONFIG GLOBAL
 CONTINUOUS_RUNNING = True
@@ -60,7 +60,9 @@ ABI = [
     {"inputs": [{"internalType": "uint256", "name": "amount", "type": "uint256"}], "name": "unstake", "outputs": [], "stateMutability": "nonpayable", "type": "function"},
     {"inputs": [{"internalType": "address", "name": "user", "type": "address"}], "name": "getPendingReward", "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}], "stateMutability": "view", "type": "function"},
     {"inputs": [{"internalType": "address", "name": "account", "type": "address"}], "name": "balanceOf", "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}], "stateMutability": "view", "type": "function"},
-    {"inputs": [{"internalType": "address", "name": "to", "type": "address"}, {"internalType": "uint256", "name": "value", "type": "uint256"}], "name": "transfer", "outputs": [{"internalType": "bool", "name": "", "type": "bool"}], "stateMutability": "nonpayable", "type": "function"}
+    {"inputs": [{"internalType": "address", "name": "to", "type": "address"}, {"internalType": "uint256", "name": "value", "type": "uint256"}], "name": "transfer", "outputs": [{"internalType": "bool", "name": "", "type": "bool"}], "stateMutability": "nonpayable", "type": "function"},
+    # HANYA ADMIN fungsi addToken
+    {"inputs": [{"internalType": "address", "name": "token", "type": "address"}], "name": "addToken", "outputs": [], "stateMutability": "nonpayable", "type": "function"}
 ]
 
 # ABI untuk ETH/BTC
@@ -190,12 +192,6 @@ async def deposit_token(web3, wallet, wallet_idx, token_contract, token_address,
     try:
         amount_wei = web3.to_wei(amount, 'ether')
         print(f"🔄 Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} depositing {amount:.6f} tokens to wrap...")
-
-        # Cek apakah kontrak dipause
-        is_paused = contract.functions.paused().call()
-        if is_paused:
-            print(f"❌ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} contract is paused, skipping deposit")
-            return False
 
         # Approve token contract to spend tokens
         approve_tx = token_contract.functions.approve(contract.address, amount_wei).build_transaction({
@@ -421,6 +417,45 @@ def safe_send_transaction(web3, signed_tx, wallet_idx, retries=3):
     print(f"{Fore.RED}🥵 Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} transaction ultimately failed after {retries} retries.{Style.RESET_ALL}")
     return None
 
+# HANYA ADMIN YANG DAPAT TAMBAHKAN fungsi add_token_to_contract
+"""
+async def add_token_to_contract(web3, wallet, wallet_idx, contract, token_address, token_symbol):
+    '''Add token to allowedTokens in WETH/WBTC contract (admin only)'''
+    try:
+        print(f"🔄 Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} adding {token_symbol} token to {contract.address}...")
+        
+        # Build transaction untuk memanggil addToken
+        tx = contract.functions.addToken(token_address).build_transaction({
+            'from': wallet.address,
+            'nonce': web3.eth.get_transaction_count(wallet.address),
+            'gas': 200000,
+            'gasPrice': get_reasonable_gas_price(web3)
+        })
+        
+        # Sign dan kirim transaksi
+        signed_tx = wallet.sign_transaction(tx)
+        tx_hash = safe_send_transaction(web3, signed_tx, wallet_idx)
+        if not tx_hash:
+            print(f"❌ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} failed to add {token_symbol} token")
+            return False
+        
+        # Tunggu konfirmasi
+        receipt = web3.eth.wait_for_transaction_receipt(tx_hash)
+        if receipt.status != 1:
+            print(f"❌ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} add {token_symbol} token failed - Status: {receipt.status}")
+            return False
+        
+        # Tambahkan delay setelah addToken
+        delay = get_random_delay(7, 15)
+        await sleep_seconds(delay, wallet_idx)
+        
+        print(f"✅ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} successfully added {token_symbol} token to {contract.address}")
+        return True
+    except Exception as e:
+        print(f"❌ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} add {token_symbol} token failed: {str(e)}")
+        return False
+"""
+
 # ======================= CYCLE FUNCTIONS =======================
 async def process_wallet(wallet, wallet_idx, cycle):
     """Process the full cycle for a wallet"""
@@ -528,9 +563,42 @@ async def main():
     try:
         private_keys = load_private_keys()
         
-        print(f"🚀 Starting 0G Galileo Testnet Staking Automation...")
+        print(f"🚀 Starting 0G Galileo Testnet Wrapped/Staking Automation...")
         print(f"ℹ️ Using {'EIP-1559' if USE_EIP1559 else 'Legacy'} transaction type{Style.RESET_ALL}")
         
+        web3 = connect_to_rpc()
+        # Inisialisasi kontrak WETH dan WBTC
+        weth_contract = web3.eth.contract(address=WETH_ADDRESS, abi=ABI)
+        wbtc_contract = web3.eth.contract(address=WBTC_ADDRESS, abi=ABI)
+
+        """
+        # Gunakan wallet admin untuk menambahkan token apa saja
+        admin_wallet_address = "0xxxxxxxxxxxxxbang"
+        admin_private_key = None
+        admin_idx = None
+        
+        # Cari private key untuk wallet admin
+        for idx, private_key in enumerate(private_keys):
+            wallet = Account.from_key(private_key)
+            if wallet.address.lower() == admin_wallet_address.lower():
+                admin_private_key = private_key
+                admin_idx = idx + 1
+                break
+        
+        if admin_private_key is None:
+            raise Exception("Admin wallet not found in private keys")
+
+        admin_wallet = Account.from_key(admin_private_key)
+        print(f"🔑 Using admin wallet {Fore.YELLOW}[{admin_idx}]{Fore.RESET}: {Fore.MAGENTA}{admin_wallet.address}{Style.RESET_ALL}")
+
+        # Tambahkan token ETH ke kontrak WETH
+        await add_token_to_contract(web3, admin_wallet, admin_idx, weth_contract, ETH_TOKEN_ADDRESS, "ETH")
+        
+        # Tambahkan token BTC ke kontrak WBTC
+        await add_token_to_contract(web3, admin_wallet, admin_idx, wbtc_contract, BTC_TOKEN_ADDRESS, "BTC")
+        """
+
+        # proses untuk semua wallet
         tasks = []
         
         # Start process for each wallet with a small delay
@@ -556,7 +624,7 @@ async def main():
         print(f"\n{Fore.RED}❌ Operation failed: {str(e)}{Style.RESET_ALL}")
     
     finally:
-        print(f"\n{Fore.MAGENTA}Thank you for using 0G Galileo Staking Automation{Style.RESET_ALL}")
+        print(f"\n{Fore.MAGENTA}Thank you bang using Staking Automation{Style.RESET_ALL}")
 
 if __name__ == "__main__":
     try:
