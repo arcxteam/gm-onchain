@@ -17,8 +17,8 @@ UNSTAKE_DELAY_MIN = 666  # 10 mins
 UNSTAKE_DELAY_MAX = 1111  # 18 mins
 WALLET_INTERVAL_MIN = 250  # 3-4 mins
 WALLET_INTERVAL_MAX = 500  # 8 mins
-STEP_DELAY_MIN = 10
-STEP_DELAY_MAX = 30
+STEP_DELAY_MIN = 20
+STEP_DELAY_MAX = 60
 RETRY_DELAY = 30
 MAX_RETRIES = 5
 
@@ -39,19 +39,19 @@ MAX_CYCLES = 9999
 # CONFIG GAS
 GAS_LIMIT_STAKE = 100000
 GAS_LIMIT_UNSTAKE = 120000
-GAS_PRICE_MIN_GWEI = 0.07
+GAS_PRICE_MIN_GWEI = 0.06
 GAS_PRICE_MAX_GWEI = 0.15
 USE_EIP1559 = True  # True/False EIP-1559 or legacy
 
 # CONFIG RPC & CONTRACT
 RPC_URLS = os.getenv("RPC_URLS", "https://evmrpc-testnet.0g.ai,https://0g-testnet-rpc.astrostake.xyz,https://0g-evm.zstake.xyz").split(",")
-EXPLORER_URL = "https://chainscan-galileo.0g.ai/txs/"
+EXPLORER_URL = "https://chainscan-galileo.0g.ai/tx/"
 WETH_ADDRESS = Web3.to_checksum_address("0x1265ace75c199a531b7b1cd2a9666f434325d1e8")
 WBTC_ADDRESS = Web3.to_checksum_address("0x15b1121c947d1806e32c4c00e41c60bdf1b35e26")
 ETH_TOKEN_ADDRESS = Web3.to_checksum_address("0x0fE9B43625fA7EdD663aDcEC0728DD635e4AbF7c")
 BTC_TOKEN_ADDRESS = Web3.to_checksum_address("0x36f6414FF1df609214dDAbA71c84f18bcf00F67d")
 
-# ABI WETH/WBTC
+# ABI untuk WETH/WBTC
 ABI = [
     {"inputs": [{"internalType": "address", "name": "spender", "type": "address"}, {"internalType": "uint256", "name": "value", "type": "uint256"}], "name": "approve", "outputs": [{"internalType": "bool", "name": "", "type": "bool"}], "stateMutability": "nonpayable", "type": "function"},
     {"inputs": [{"internalType": "address", "name": "token", "type": "address"}, {"internalType": "uint256", "name": "amount", "type": "uint256"}], "name": "deposit", "outputs": [], "stateMutability": "nonpayable", "type": "function"},
@@ -61,11 +61,11 @@ ABI = [
     {"inputs": [{"internalType": "address", "name": "user", "type": "address"}], "name": "getPendingReward", "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}], "stateMutability": "view", "type": "function"},
     {"inputs": [{"internalType": "address", "name": "account", "type": "address"}], "name": "balanceOf", "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}], "stateMutability": "view", "type": "function"},
     {"inputs": [{"internalType": "address", "name": "to", "type": "address"}, {"internalType": "uint256", "name": "value", "type": "uint256"}], "name": "transfer", "outputs": [{"internalType": "bool", "name": "", "type": "bool"}], "stateMutability": "nonpayable", "type": "function"},
-    # HANYA ADMIN YANG DAPAT waitlist addToken
+    # HANYA ADMIN fungsi addToken
     {"inputs": [{"internalType": "address", "name": "token", "type": "address"}], "name": "addToken", "outputs": [], "stateMutability": "nonpayable", "type": "function"}
 ]
 
-# ABI ETH/BTC
+# ABI untuk ETH/BTC
 TOKEN_ABI = [
     {"inputs": [{"internalType": "address", "name": "_spender", "type": "address"}, {"internalType": "uint256", "name": "_value", "type": "uint256"}],
      "name": "approve", "outputs": [{"internalType": "bool", "name": "", "type": "bool"}], "stateMutability": "nonpayable", "type": "function"},
@@ -134,7 +134,7 @@ def load_private_keys():
     """Load private keys from environment variable and file"""
     private_keys = []
 
-    # Load from .ENV
+    # Load from environment variable
     env_private_key = os.getenv("PRIVATE_KEY")
     if env_private_key:
         private_keys.append(env_private_key.strip())
@@ -168,7 +168,7 @@ def get_reasonable_gas_price(web3):
     try:
         target_gwei = random.uniform(GAS_PRICE_MIN_GWEI, GAS_PRICE_MAX_GWEI)
         final_gas_price = web3.to_wei(target_gwei, 'gwei')
-        print(f"🔋 Using random gas price: {Fore.RED}{target_gwei:.2f} gwei{Fore.RESET}")
+        print(f"🔋 Using random gas price: {Fore.GREEN}{target_gwei:.2f} gwei{Fore.RESET}")
         return int(final_gas_price)
     except Exception as e:
         print(f"Error getting gas price: {e}. Using {Fore.RED}default.{Style.RESET_ALL}")
@@ -183,7 +183,7 @@ def get_random_amount():
 async def sleep_seconds(seconds, wallet_idx=None):
     """Sleep with a nice message"""
     wallet_str = f"Wallet {wallet_idx} " if wallet_idx is not None else ""
-    print(f"🛏️  {Fore.GREEN} {wallet_str}sleeping in {seconds} seconds...{Style.RESET_ALL}")
+    print(f"🛏️  {Fore.CYAN} {wallet_str}sleeping in {seconds} seconds...{Style.RESET_ALL}")
     await asyncio.sleep(seconds)
 
 # ======================= TRANSACTION FUNCTIONS =======================
@@ -209,7 +209,8 @@ async def deposit_token(web3, wallet, wallet_idx, token_contract, token_address,
         if receipt.status != 1:
             print(f"❌ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} approve transaction failed - Status: {receipt.status}")
             return False
-        delay = get_random_delay(7, 21) #delay approve
+        # Tambahkan delay setelah approve
+        delay = get_random_delay(20, 60)
         await sleep_seconds(delay, wallet_idx)
 
         # Deposit token
@@ -229,7 +230,8 @@ async def deposit_token(web3, wallet, wallet_idx, token_contract, token_address,
         if receipt.status != 1:
             print(f"❌ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} deposit transaction failed - Status: {receipt.status}")
             return False
-        delay = get_random_delay(7, 21) # delay deposit
+        # Tambahkan delay setelah deposit
+        delay = get_random_delay(40, 80)
         await sleep_seconds(delay, wallet_idx)
 
         print(f"✅ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} successfully deposited {amount:.6f} tokens")
@@ -237,10 +239,61 @@ async def deposit_token(web3, wallet, wallet_idx, token_contract, token_address,
     except Exception as e:
         print(f"❌ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} deposit failed: {str(e)}")
         return False
+        
+async def withdraw_token(web3, wallet, wallet_idx, contract, token_address, min_amount, max_amount):
+    """Withdraw WETH/WBTC to unwrap back to native token (e.g., ETH or BTC) with random amount"""
+    try:
+        # Get balance of the wrapped token (WETH or WBTC)
+        balance = contract.functions.balanceOf(wallet.address).call()
+        balance_eth = web3.from_wei(balance, 'ether')
+        print(f"💰 Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} {contract.address == WETH_ADDRESS and 'WETH' or 'WBTC'} balance: {Fore.YELLOW}{balance_eth:.6f}{Style.RESET_ALL}")
+
+        # Determine random amount to withdraw based on config
+        max_withdraw = min(max_amount, balance_eth)
+        if max_withdraw <= 0:
+            print(f"⚠️ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} no balance to withdraw")
+            return False
+        amount_to_withdraw = random.uniform(min_amount, max_withdraw)
+        amount_wei = web3.to_wei(amount_to_withdraw, 'ether')
+
+        if amount_wei > balance:
+            print(f"❌ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} insufficient balance for withdrawal")
+            return False
+
+        print(f"🔄 Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} withdrawing {amount_to_withdraw:.6f} {contract.address == WETH_ADDRESS and 'WETH' or 'WBTC'} to unwrap...")
+
+        # Prepare withdraw transaction
+        withdraw_tx = contract.functions.withdraw(token_address, amount_wei).build_transaction({
+            'from': wallet.address,
+            'nonce': web3.eth.get_transaction_count(wallet.address),
+            'gas': 150000,
+            'gasPrice': get_reasonable_gas_price(web3)
+        })
+        signed_withdraw_tx = wallet.sign_transaction(withdraw_tx)
+        withdraw_tx_hash = safe_send_transaction(web3, signed_withdraw_tx, wallet_idx)
+        if not withdraw_tx_hash:
+            print(f"❌ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} failed to withdraw token")
+            return False
+
+        receipt = web3.eth.wait_for_transaction_receipt(withdraw_tx_hash)
+        if receipt.status != 1:
+            print(f"❌ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} withdraw transaction failed - Status: {receipt.status}")
+            return False
+
+        # Add delay after withdrawal
+        delay = get_random_delay(40, 80)
+        await sleep_seconds(delay, wallet_idx)
+
+        print(f"✅ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} successfully withdrew {amount_to_withdraw:.6f} {contract.address == WETH_ADDRESS and 'WETH' or 'WBTC'}")
+        return True
+    except Exception as e:
+        print(f"❌ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} withdraw failed: {str(e)}")
+        return False
 
 async def stake_token(web3, wallet, wallet_idx, contract, token_symbol):
     """Stake WETH/WBTC with random amount"""
     try:
+        # Get token balance
         balance = get_wallet_balance(web3, wallet.address, contract)
         print(f"💰 Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} {token_symbol} balance: {Fore.YELLOW}{balance:.6f}{Style.RESET_ALL}")
         
@@ -271,8 +324,8 @@ async def stake_token(web3, wallet, wallet_idx, contract, token_symbol):
         if receipt.status != 1:
             print(f"❌ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} approve transaction failed")
             return None
-        # delay setelah approve
-        delay = get_random_delay(STEP_DELAY_MIN, STEP_DELAY_MAX)
+        # Tambahkan delay setelah approve
+        delay = get_random_delay(20, 60)
         await sleep_seconds(delay, wallet_idx)
 
         # Prepare staking transaction
@@ -304,15 +357,16 @@ async def stake_token(web3, wallet, wallet_idx, contract, token_symbol):
             print(f"❌ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} stake transaction {Fore.RED}failed{Style.RESET_ALL}")
             return None
         
-        # delay setelah stake berhasil
+        # Tambahkan delay setelah stake berhasil
         delay = get_random_delay(STEP_DELAY_MIN, STEP_DELAY_MAX)
         await sleep_seconds(delay, wallet_idx)
 
+        # Get new balance
         new_balance = get_wallet_balance(web3, wallet.address, contract)
         print(f"✅ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} {Fore.GREEN}STAKING was successful!{Style.RESET_ALL}")
         print(f"💰 Updated {token_symbol} balance: {Fore.YELLOW}{new_balance:.6f}{Style.RESET_ALL}")
         
-        # Record stake timestamp
+        # Record stake timestamp and amount
         current_time = datetime.now()
         STAKE_TIMESTAMPS[wallet.address] = {
             'time': current_time,
@@ -329,6 +383,7 @@ async def stake_token(web3, wallet, wallet_idx, contract, token_symbol):
 async def unstake_token(web3, wallet, wallet_idx, contract, token_symbol):
     """Unstake WETH/WBTC tokens"""
     try:
+        # Check if we have a record of the stake
         if wallet.address not in STAKE_TIMESTAMPS:
             print(f"⚠️  Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} no stake timestamp found. Using default amount")
             amount_to_unstake = web3.to_wei(MIN_STAKE_AMOUNT, 'ether')
@@ -367,7 +422,7 @@ async def unstake_token(web3, wallet, wallet_idx, contract, token_symbol):
             print(f"❌ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} unstake transaction failed...")
             return False
         
-        # delay setelah unstake berhasil
+        # Tambahkan delay setelah unstake berhasil
         delay = get_random_delay(STEP_DELAY_MIN, STEP_DELAY_MAX)
         await sleep_seconds(delay, wallet_idx)
 
@@ -490,8 +545,6 @@ async def process_wallet(wallet, wallet_idx, cycle):
             delay = get_random_delay(STEP_DELAY_MIN, STEP_DELAY_MAX)
             await sleep_seconds(delay, wallet_idx)
             return False
-        delay = get_random_delay(STEP_DELAY_MIN, STEP_DELAY_MAX)
-        await sleep_seconds(delay, wallet_idx)
 
         # Step 4: Stake WBTC
         result_wbtc = await stake_token(web3, wallet, wallet_idx, wbtc_contract, "WBTC")
@@ -500,8 +553,6 @@ async def process_wallet(wallet, wallet_idx, cycle):
             delay = get_random_delay(STEP_DELAY_MIN, STEP_DELAY_MAX)
             await sleep_seconds(delay, wallet_idx)
             return False
-        delay = get_random_delay(STEP_DELAY_MIN, STEP_DELAY_MAX)
-        await sleep_seconds(delay, wallet_idx)
 
         # Step 5: Wait before unstaking
         unstake_delay = get_random_delay(UNSTAKE_DELAY_MIN, UNSTAKE_DELAY_MAX)
@@ -524,6 +575,21 @@ async def process_wallet(wallet, wallet_idx, cycle):
             await sleep_seconds(delay, wallet_idx)
             return False
 
+        # Step 8: Withdraw WETH and WBTC back to native tokens
+        if unstake_weth_success or unstake_wbtc_success:
+            # Withdraw WETH to ETH
+            weth_balance = get_wallet_balance(web3, wallet.address, weth_contract)
+            if weth_balance >= MIN_WRAP_ETH_AMOUNT:
+                await withdraw_token(web3, wallet, wallet_idx, weth_contract, ETH_TOKEN_ADDRESS, MIN_WRAP_ETH_AMOUNT, MAX_WRAP_ETH_AMOUNT)
+            
+            # Withdraw WBTC to BTC
+            wbtc_balance = get_wallet_balance(web3, wallet.address, wbtc_contract)
+            if wbtc_balance >= MIN_WRAP_BTC_AMOUNT:
+                await withdraw_token(web3, wallet, wallet_idx, wbtc_contract, BTC_TOKEN_ADDRESS, MIN_WRAP_BTC_AMOUNT, MAX_WRAP_BTC_AMOUNT)
+
+            delay = get_random_delay(STEP_DELAY_MIN, STEP_DELAY_MAX)
+            await sleep_seconds(delay, wallet_idx)
+
         print(f"\n ✅ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} cycle {Fore.YELLOW}[{cycle}]{Fore.RESET} {Fore.GREEN}completed successfully!{Style.RESET_ALL}\n")
         return True
         
@@ -543,7 +609,7 @@ async def run_wallet_continuously(wallet, wallet_idx):
             cycle += 1
             
             # Add a random delay between cycles for the same wallet
-            inter_cycle_delay = random.randint(21, 61)  # 21-61 seconds
+            inter_cycle_delay = random.randint(60, 120)  # 21-61 seconds
             print(f"⏳ Wallet {Fore.YELLOW}[{wallet_idx}]{Fore.RESET} waiting {inter_cycle_delay} seconds before next cycle...")
             await sleep_seconds(inter_cycle_delay, wallet_idx)
             
