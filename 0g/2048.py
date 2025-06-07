@@ -4,13 +4,14 @@ import time
 from datetime import datetime
 from dotenv import load_dotenv
 from web3 import Web3
+from web3.middleware import geth_poa_middleware
 from eth_account import Account
 import colorama
 from colorama import Fore, Style
 
 colorama.init(autoreset=True)
 
-# Konfigurasi
+# =================== Konfigurasi ==================== #
 RPC_URLS = [
     "https://evmrpc-testnet.0g.ai",
     "https://0g-testnet-rpc.astrostake.xyz",
@@ -26,18 +27,18 @@ RPC_URLS = [
     "https://0g.json-rpc.cryptomolot.com",
     "https://0g.bangcode.id"
 ]
-GAS_LIMIT_RANGE = (100000, 2000000)  # Rentang gas limit: 200000-500000
-GWEI_RANGE = (0.05, 2.0)  # Rentang Gwei: 0.5-11
+GAS_LIMIT_RANGE = (100000, 2000000)
+GWEI_RANGE = (0.05, 2.0)
 CONTRACT_ADDRESS = Web3.to_checksum_address("0xdF0d5abC614EF45C4bCEA121624644523BAc80b7")
-WALLET_DELAY_RANGE = (50, 100)  # Delay antar wallet: 10-30 detik
-GAME_CYCLE_DELAY_RANGE = (80, 300)  # Delay setelah game over: 60-200 detik
-GAME_MODE = "off-chain"  # "on-chain" atau "off-chain"
-GAME_STEPS_RANGE = (30, 150)  # Jumlah langkah per game: 10-50 untuk pengujian
-USE_EIP1559 = True  # False for gas legacy
-CHAIN_ID = 16601  # Chain ID untuk Holesky
-TIMEOUT = 300  # Timeout: 300 detik
+WALLET_DELAY_RANGE = (80, 180)  # Delay antar wallet
+GAME_CYCLE_DELAY_RANGE = (100, 350)  # Delay game over
+GAME_MODE = "off-chain"  # mode bisa pilih "on-chain" atau "off-chain"
+GAME_STEPS_RANGE = (30, 150)  # Jumlah step per game max2000 bang
+USE_EIP1559 = True  # False (gas legacy)
+CHAIN_ID = 16601
+TIMEOUT = 300
 
-# ABI untuk Game 2048
+# ABI untuk Game2048 (author @0xgrey)
 CONTRACT_ABI = [
     {"inputs": [], "stateMutability": "nonpayable", "type": "constructor"},
     {"inputs": [], "name": "GameAlreadyEnded", "type": "error"},
@@ -215,9 +216,8 @@ def get_legacy_gas_price(w3):
         return {'gasPrice': w3.to_wei(random.uniform(*GWEI_RANGE), 'gwei')}
 
 def generate_game_id(player_address):
-    # Pastikan player_address adalah string heksadesimal tanpa '0x'
     addr = player_address[2:] if player_address.startswith('0x') else player_address
-    addr_bytes = bytes.fromhex(addr)  # 20 byte alamat
+    addr_bytes = bytes.fromhex(addr)
 
     # Buat 32 byte gameId
     # Byte 0-11 (12 byte pertama): acak
@@ -303,12 +303,12 @@ def merge_left(row):
 
 def generate_next_move_and_result(board):
     # Prioritaskan gerakan: Kiri → Atas → Kanan → Bawah
-    moves_priority = [3, 0, 1, 2]  # Kiri, Atas, Kanan, Bawah
+    moves_priority = [3, 0, 1, 2]
     for move in moves_priority:
         new_board = slide_board(board, move)
         if new_board != board:  # Jika gerakan menghasilkan perubahan
             return move, new_board
-    # Jika tidak ada gerakan valid, return move dummy (seharusnya game over)
+    # Jika tidak ada gerakan valid, return move dummy (biar game over)
     return moves_priority[0], board
 
 def check_game_over(board):
@@ -319,21 +319,21 @@ def check_game_over(board):
     
     # Cek slot kosong
     if 0 in grid:
-        return False  # Ada slot kosong, game belum selesai
+        return False
     
     # Cek horizontal (baris)
     for i in range(4):
         row = grid[i * 4:(i + 1) * 4]
         for j in range(3):
             if row[j] == row[j + 1] and row[j] != 0:
-                return False  # Ada ubin sama bersebelahan, game belum selesai
+                return False
     
     # Cek vertikal (kolom)
     for j in range(4):
         column = [grid[j + i * 4] for i in range(4)]
         for i in range(3):
             if column[i] == column[i + 1] and column[i] != 0:
-                return False  # Ada ubin sama bersebelahan, game belum selesai
+                return False
     
     return True  # Tidak ada gerakan valid, game selesai
 
@@ -428,11 +428,18 @@ class Game2048:
     def retry_transaction(self, build_tx_func, priv_key, max_retries=10, delay=25):
         """
         Fungsi untuk mencoba ulang transaksi hingga max_retries kali.
+        Menggunakan nonce dari tx_params dengan opsi cadangan jika gagal.
         """
+        account = self.w3.eth.account.from_key(priv_key)
         for attempt in range(max_retries):
             try:
+                # Bangun transaksi dengan nonce dari tx_params
                 tx = build_tx_func()
-                signed_tx = self.w3.eth.account.sign_transaction(tx, priv_key)
+                # Pastikan nonce ada di tx, jika tidak Web3.py akan gagal
+                if 'nonce' not in tx:
+                    raise ValueError("Nonce not provided in tx_params")
+                # Tanda tangani transaksi
+                signed_tx = account.sign_transaction(tx)
                 tx_hash = self.w3.eth.send_raw_transaction(signed_tx.rawTransaction)
                 Logger.info(f" 🧵 Transaction sent: {tx_hash.hex()} {Fore.YELLOW}(Attempt {attempt + 1}/{max_retries}){Fore.RESET}")
                 receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=TIMEOUT)
@@ -446,7 +453,28 @@ class Game2048:
                     continue
             except Exception as e:
                 Logger.error(f"Transaction failed: {str(e)} (Attempt {attempt + 1}/{max_retries})")
-                if "timeout" in str(e).lower() or "connection" in str(e).lower():
+                # Opsi cadangan: Jika error "nonce too low" atau masalah lain, ambil nonce terbaru secara manual
+                if "nonce too low" in str(e).lower() or "missing kwargs" in str(e).lower():
+                    Logger.warning("🔁 Nonce issue detected. Switching to manual nonce management...")
+                    try:
+                        # Ambil nonce terbaru dari jaringan
+                        nonce = self.w3.eth.get_transaction_count(account.address, 'pending')
+                        Logger.info(f"🔁 Updated nonce to {nonce}")
+                        # Bangun ulang transaksi dengan nonce manual
+                        tx = build_tx_func()
+                        tx['nonce'] = nonce  # Pastikan nonce diperbarui
+                        signed_tx = self.w3.eth.account.sign_transaction(tx, priv_key)
+                        tx_hash = self.w3.eth.send_raw_transaction(signed_tx.rawTransaction)
+                        Logger.info(f" 🧵 Transaction sent with manual nonce: {tx_hash.hex()} (Attempt {attempt + 1}/{max_retries})")
+                        receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=TIMEOUT)
+                        if receipt.status == 1:
+                            return tx_hash, receipt
+                        else:
+                            Logger.error(f" ↪️ Transaction reverted: {tx_hash.hex()} (Attempt {attempt + 1}/{max_retries})")
+                    except Exception as e2:
+                        Logger.error(f"Manual nonce retry failed: {str(e2)}")
+                # Tangani error lain seperti timeout atau koneksi
+                elif "timeout" in str(e).lower() or "connection" in str(e).lower():
                     Logger.warning("🔁 RPC might be disconnected. Switching to another RPC...")
                     self.w3 = self.connect_rpc()  # Ganti RPC
                 if attempt < max_retries - 1:
@@ -472,7 +500,8 @@ class Game2048:
                     self.switch_wallet()
                     return False
 
-            nonce = self.w3.eth.get_transaction_count(player_address, 'pending')  # Gunakan nonce pending
+            # Ambil nonce terbaru sebelum transaksi pertama
+            nonce = self.w3.eth.get_transaction_count(player_address, 'pending')
             gas_limit = random.randint(*GAS_LIMIT_RANGE)
             gas_params = get_eip1559_gas_params(self.w3) if self.use_eip1559 else get_legacy_gas_price(self.w3)
             tx_params = {
@@ -494,12 +523,14 @@ class Game2048:
                 return False
 
             Logger.success(f" 🧵 [Game {self.batch_count}] {Fore.MAGENTA}ApprovePlayer{Fore.RESET} Successful! HashID -> {Fore.GREEN}{approve_tx_hash.hex()}{Fore.RESET}")
-            nonce += 1  # Perbarui nonce
+
+            # Ambil nonce terbaru sebelum transaksi berikutnya
+            nonce = self.w3.eth.get_transaction_count(player_address, 'pending')
+            tx_params['nonce'] = nonce
 
             # Langkah 2: Pilih mode permainan
             is_onchain = (GAME_MODE == "on-chain")
             Logger.info(f" 🧵 [Game {self.batch_count}] Sending SelectMode transaction (Mode: {GAME_MODE})...")
-            tx_params['nonce'] = nonce
             def build_select_tx():
                 return self.contract.functions.selectMode(is_onchain).build_transaction(tx_params)
             select_tx_hash, select_receipt = self.retry_transaction(build_select_tx, priv_key)
@@ -508,7 +539,10 @@ class Game2048:
                 return False
 
             Logger.success(f" 🧵 [Game {self.batch_count}] {Fore.MAGENTA}SelectMode{Fore.RESET} Successful! {Fore.GREEN}Mode: {GAME_MODE}{Fore.RESET}")
-            nonce += 1  # Perbarui nonce
+
+            # Ambil nonce terbaru sebelum transaksi berikutnya
+            nonce = self.w3.eth.get_transaction_count(player_address, 'pending')
+            tx_params['nonce'] = nonce
 
             # Langkah 3: Mulai game baru
             game_id = generate_game_id(player_address)
@@ -516,7 +550,6 @@ class Game2048:
             initial_moves = generate_initial_moves()
 
             Logger.info(f" 🧵 [Game {self.batch_count}] Sending StartGame transaction...")
-            tx_params['nonce'] = nonce
             def build_start_tx():
                 return self.contract.functions.startGame(
                     game_id,
@@ -532,7 +565,6 @@ class Game2048:
             Logger.success(f" 🧵 [Game {self.batch_count}] {Fore.MAGENTA}StartGame{Fore.RESET} Successful! HashID -> {Fore.GREEN}{start_tx_hash.hex()}{Fore.RESET}")
             Logger.gas_report(f" ⛽ Gas Used for StartGame: {gas_info_start['gas_used']} units | Cost: {Fore.YELLOW}{gas_info_start['gas_cost_eth']:.8f} 0G{Fore.RESET}")
             start_success = True
-            nonce += 1  # Perbarui nonce
 
             # Langkah 4: Lakukan langkah dalam game
             if start_success:
@@ -549,6 +581,8 @@ class Game2048:
                         Logger.info(f" 🧵 [Game {self.batch_count} Step {Fore.GREEN}#{step+1}{Fore.RESET}] Move: {Fore.MAGENTA}{move_str}{Fore.RESET}")
                         time.sleep(7)  # Jeda 7 detik antar langkah
                         Logger.info(f" 🧵 [Game {self.batch_count}] Sending Play transaction for step {Fore.GREEN}#{step+1}...{Fore.RESET}")
+                        # Ambil nonce terbaru sebelum transaksi
+                        nonce = self.w3.eth.get_transaction_count(player_address, 'pending')
                         tx_params['nonce'] = nonce
                         def build_play_tx():
                             return self.contract.functions.play(
@@ -570,7 +604,6 @@ class Game2048:
                             tile = get_tile(result_board, i)
                             if tile > highest_tile:
                                 highest_tile = tile
-                        nonce += 1  # Perbarui nonce
                         time.sleep(20)  # Delay untuk menghindari error nonce
                 else:
                     # Mode off-chain: Kumpulkan semua langkah, lalu kirim batch
@@ -600,6 +633,8 @@ class Game2048:
                     Logger.info(f" 🧵 [Game {self.batch_count}] Estimating gas for batch of {self.game_steps} step moves...")
                     tx_params_for_estimate = tx_params.copy()
                     tx_params_for_estimate['gas'] = GAS_LIMIT_RANGE[1]  # Gunakan gas limit maksimum untuk estimasi
+                    # Ambil nonce terbaru sebelum estimasi
+                    nonce = self.w3.eth.get_transaction_count(player_address, 'pending')
                     tx_params_for_estimate['nonce'] = nonce
                     estimated_gas = self.contract.functions.submitBatchMoves(
                         game_id,
@@ -617,6 +652,8 @@ class Game2048:
                     tx_params['gas'] = gas_limit
 
                     Logger.info(f" 🧵 [Game {Fore.GREEN}#{self.batch_count}{Fore.RESET}] Sending batch of {self.game_steps} moves with gas limit {gas_limit}...")
+                    # Ambil nonce terbaru sebelum transaksi
+                    nonce = self.w3.eth.get_transaction_count(player_address, 'pending')
                     tx_params['nonce'] = nonce
                     def build_batch_tx():
                         return self.contract.functions.submitBatchMoves(
@@ -640,7 +677,6 @@ class Game2048:
                         for i, (move, result_board) in enumerate(zip(move_events[0]['args']['moves'], move_events[0]['args']['resultBoards'])):
                             move_str = ["Up", "Right", "Down", "Left"][move]
                             Logger.info(f" 🧵 [Game {self.batch_count} Step #{i+1}] Recorded Move: {move_str}, Result Board: {result_board}")
-                    nonce += 1  # Perbarui nonce
 
             # Langkah 5: Cek apakah game benar-benar selesai
             Logger.info(f" 🧵 [Game {self.batch_count}] Checking if game is over...")
@@ -654,6 +690,8 @@ class Game2048:
             Logger.info(f" 🧵 [Game {self.batch_count}] Estimating gas for EndGame transaction...")
             tx_params_for_estimate = tx_params.copy()
             tx_params_for_estimate['gas'] = GAS_LIMIT_RANGE[1]  # Gunakan gas limit maksimum untuk estimasi
+            # Ambil nonce terbaru sebelum estimasi
+            nonce = self.w3.eth.get_transaction_count(player_address, 'pending')
             tx_params_for_estimate['nonce'] = nonce
             estimated_gas = self.contract.functions.endGame(game_id).estimate_gas(tx_params_for_estimate)
             Logger.info(f" 🧵 Estimated gas for EndGame: {estimated_gas} units")
@@ -667,6 +705,8 @@ class Game2048:
             tx_params['gas'] = gas_limit
 
             Logger.info(f" 🧵 [Game {self.batch_count}] Sending EndGame transaction with gas limit {gas_limit}...")
+            # Ambil nonce terbaru sebelum transaksi
+            nonce = self.w3.eth.get_transaction_count(player_address, 'pending')
             tx_params['nonce'] = nonce
             def build_end_game_tx():
                 return self.contract.functions.endGame(game_id).build_transaction(tx_params)
@@ -685,10 +725,12 @@ class Game2048:
                 highest_tile = game_over_event[0]['args']['highestTile']
                 moves_count = game_over_event[0]['args']['moves']
                 Logger.info(f"Game over! Highest tile: {highest_tile}, Moves: {moves_count}")
-            nonce += 1  # Perbarui nonce
 
             # Langkah 7: Klaim NFT secara otomatis dengan claimNFT
             Logger.info(f" 🧵 [Game {self.batch_count}] Estimating gas for ClaimNFT transaction...")
+            tx_params_for_estimate['gas'] = GAS_LIMIT_RANGE[1]  # Gunakan gas limit maksimum untuk estimasi
+            # Ambil nonce terbaru sebelum estimasi
+            nonce = self.w3.eth.get_transaction_count(player_address, 'pending')
             tx_params_for_estimate['nonce'] = nonce
             estimated_gas = self.contract.functions.claimNFT(game_id).estimate_gas(tx_params_for_estimate)
             Logger.info(f" 🧵 Estimated gas for ClaimNFT: {estimated_gas} units")
@@ -702,6 +744,8 @@ class Game2048:
             tx_params['gas'] = gas_limit
 
             Logger.info(f" 🧵 [Game {self.batch_count}] Sending ClaimNFT transaction with gas limit {gas_limit}...")
+            # Ambil nonce terbaru sebelum transaksi
+            nonce = self.w3.eth.get_transaction_count(player_address, 'pending')
             tx_params['nonce'] = nonce
             def build_claim_nft_tx():
                 return self.contract.functions.claimNFT(game_id).build_transaction(tx_params)
@@ -728,7 +772,6 @@ class Game2048:
             pending_cleared_event = self.contract.events.PendingNFTCleared().process_receipt(claim_nft_receipt)
             if pending_cleared_event:
                 Logger.info(f" 🧵 [Game {self.batch_count}] Pending NFT data cleared for game ID: {pending_cleared_event[0]['args']['gameId'].hex()}")
-            nonce += 1  # Perbarui nonce
 
             # Cek poin dan leaderboard
             points = self.contract.functions.getPlayerPoints(player_address).call()
