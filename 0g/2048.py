@@ -4,7 +4,7 @@ import time
 from datetime import datetime
 from dotenv import load_dotenv
 from web3 import Web3
-from web3.middleware import geth_poa_middleware
+# from web3.middleware import geth_poa_middleware
 from eth_account import Account
 import colorama
 from colorama import Fore, Style
@@ -27,13 +27,13 @@ RPC_URLS = [
     "https://0g.json-rpc.cryptomolot.com",
     "https://0g.bangcode.id"
 ]
-GAS_LIMIT_RANGE = (100000, 2000000)
+GAS_LIMIT_RANGE = (100000, 3000000)
 GWEI_RANGE = (0.05, 2.0)
 CONTRACT_ADDRESS = Web3.to_checksum_address("0xdF0d5abC614EF45C4bCEA121624644523BAc80b7")
-WALLET_DELAY_RANGE = (80, 180)  # Delay antar wallet
-GAME_CYCLE_DELAY_RANGE = (100, 350)  # Delay game over
+WALLET_DELAY_RANGE = (80, 200)  # Delay antar wallet
+GAME_CYCLE_DELAY_RANGE = (150, 420)  # Delay game over
 GAME_MODE = "off-chain"  # mode bisa pilih "on-chain" atau "off-chain"
-GAME_STEPS_RANGE = (30, 150)  # Jumlah step per game max2000 bang
+GAME_STEPS_RANGE = (70, 250)  # Jumlah step per game max2000 bang
 USE_EIP1559 = True  # False (gas legacy)
 CHAIN_ID = 16601
 TIMEOUT = 300
@@ -189,7 +189,7 @@ def get_eip1559_gas_params(w3):
         latest_block = w3.eth.get_block('latest')
         base_fee = latest_block.get('baseFeePerGas', w3.to_wei(0.5, 'gwei'))
         priority_fee = w3.eth.max_priority_fee
-        max_fee = int(base_fee * 1.5) + priority_fee  # Margin lebih besar (50%)
+        max_fee = int(base_fee * 1.3) + priority_fee  # Margin lebih besar (30%)
         return {
             'maxFeePerGas': max_fee,
             'maxPriorityFeePerGas': priority_fee
@@ -230,7 +230,7 @@ def generate_game_id(player_address):
     
     # Debug: Cetak gameId dan periksa apakah alamatnya sesuai
     game_id_hex = game_id.hex()
-    addr_part = game_id_hex[-40:]  # 20 byte terakhir (40 karakter hex)
+    addr_part = game_id_hex[-40:]
     Logger.info(f"Generated gameId: 0x{game_id_hex}")
     Logger.info(f"{Fore.GREEN}Player address: 0x{addr}{Fore.RESET}")
     Logger.info(f"Address part in gameId (last 20 bytes): 0x{addr_part}")
@@ -370,7 +370,6 @@ class Game2048:
                     w3 = Web3(Web3.HTTPProvider(url))
                     if w3.is_connected():
                         Logger.info(f" 📶 Yes..Connected to RPC: {Fore.MAGENTA}{url}")
-                        # Perbarui kontrak dengan provider baru
                         if hasattr(self, 'contract'):
                             self.contract = w3.eth.contract(
                                 address=CONTRACT_ADDRESS,
@@ -433,12 +432,9 @@ class Game2048:
         account = self.w3.eth.account.from_key(priv_key)
         for attempt in range(max_retries):
             try:
-                # Bangun transaksi dengan nonce dari tx_params
                 tx = build_tx_func()
-                # Pastikan nonce ada di tx, jika tidak Web3.py akan gagal
                 if 'nonce' not in tx:
                     raise ValueError("Nonce not provided in tx_params")
-                # Tanda tangani transaksi
                 signed_tx = account.sign_transaction(tx)
                 tx_hash = self.w3.eth.send_raw_transaction(signed_tx.rawTransaction)
                 Logger.info(f" 🧵 Transaction sent: {tx_hash.hex()} {Fore.YELLOW}(Attempt {attempt + 1}/{max_retries}){Fore.RESET}")
@@ -446,7 +442,7 @@ class Game2048:
                 if receipt.status == 1:
                     return tx_hash, receipt
                 else:
-                    Logger.error(f" ↪️ Transaction reverted: {tx_hash.hex()} (Attempt {attempt + 1}/{max_retries})")
+                    Logger.error(f" ↪️ Transaction reverted: {tx_hash.hex()} {Fore.YELLOW}(Attempt {attempt + 1}/{max_retries}){Fore.RESET}")
                     if attempt < max_retries - 1:
                         Logger.warning(f"🔁 Retrying transaction in {delay} seconds...")
                         time.sleep(delay)
@@ -455,28 +451,27 @@ class Game2048:
                 Logger.error(f"Transaction failed: {str(e)} (Attempt {attempt + 1}/{max_retries})")
                 # Opsi cadangan: Jika error "nonce too low" atau masalah lain, ambil nonce terbaru secara manual
                 if "nonce too low" in str(e).lower() or "missing kwargs" in str(e).lower():
-                    Logger.warning("🔁 Nonce issue detected. Switching to manual nonce management...")
+                    Logger.warning(f"🔁 {Fore.YELLOW}Nonce issue detected. Switching to manual nonce management...{Fore.RESET}")
                     try:
-                        # Ambil nonce terbaru dari jaringan
                         nonce = self.w3.eth.get_transaction_count(account.address, 'pending')
-                        Logger.info(f"🔁 Updated nonce to {nonce}")
+                        Logger.info(f"🔁 {Fore.GREEN}Updated nonce to {nonce}{Fore.RESET}")
                         # Bangun ulang transaksi dengan nonce manual
                         tx = build_tx_func()
                         tx['nonce'] = nonce  # Pastikan nonce diperbarui
                         signed_tx = self.w3.eth.account.sign_transaction(tx, priv_key)
                         tx_hash = self.w3.eth.send_raw_transaction(signed_tx.rawTransaction)
-                        Logger.info(f" 🧵 Transaction sent with manual nonce: {tx_hash.hex()} (Attempt {attempt + 1}/{max_retries})")
+                        Logger.info(f" 🧵 Transaction sent with manual nonce: {tx_hash.hex()} {Fore.YELLOW}(Attempt {attempt + 1}/{max_retries}){Fore.RESET}")
                         receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=TIMEOUT)
                         if receipt.status == 1:
                             return tx_hash, receipt
                         else:
-                            Logger.error(f" ↪️ Transaction reverted: {tx_hash.hex()} (Attempt {attempt + 1}/{max_retries})")
+                            Logger.error(f" ↪️ Transaction reverted: {tx_hash.hex()} {Fore.YELLOW}(Attempt {attempt + 1}/{max_retries}){Fore.RESET}")
                     except Exception as e2:
                         Logger.error(f"Manual nonce retry failed: {str(e2)}")
                 # Tangani error lain seperti timeout atau koneksi
                 elif "timeout" in str(e).lower() or "connection" in str(e).lower():
                     Logger.warning("🔁 RPC might be disconnected. Switching to another RPC...")
-                    self.w3 = self.connect_rpc()  # Ganti RPC
+                    self.w3 = self.connect_rpc()
                 if attempt < max_retries - 1:
                     Logger.warning(f"🔁 Retrying transaction in {delay} seconds...")
                     time.sleep(delay)
@@ -558,7 +553,7 @@ class Game2048:
                 ).build_transaction(tx_params)
             start_tx_hash, start_receipt = self.retry_transaction(build_start_tx, priv_key)
             if start_receipt is None or start_receipt.status != 1:
-                Logger.error(f" ↪️ [Game #{self.batch_count}] StartGame failed after retries.")
+                Logger.error(f" ↪️ [Game {self.batch_count}] StartGame failed after retries.")
                 return False
 
             gas_info_start = self.calculate_gas_cost(start_receipt)
@@ -596,8 +591,16 @@ class Game2048:
                             break
 
                         gas_info_play = self.calculate_gas_cost(play_receipt)
-                        Logger.success(f" 🧵 [Game {self.batch_count} Step{Fore.GREEN}#{step+1}{Fore.RESET}] Play Successful! HashID -> {Fore.GREEN}{play_tx_hash.hex()}{Fore.RESET}")
-                        Logger.gas_report(f" ⛽ Gas Used for Play: {gas_info_play['gas_used']} units | Cost: {Fore.YELLOW}{gas_info_play['gas_cost_eth']:.8f} 0G{Fore.RESET}")
+                        
+                        # Parse event NewMoves
+                        new_move_event = []
+                        new_move_signature = self.w3.keccak(text="NewMove(address,bytes32,uint256,uint256)").hex()
+                        for log in play_receipt['logs']:
+                            if len(log['topics']) > 0 and log['topics'][0].hex() == new_move_signature:
+                                new_move_event.append(self.contract.events.NewMove().process_log(log))
+                        if new_move_event:
+                            Logger.success(f" 🧵 [Game {self.batch_count} Step {Fore.GREEN}#{step+1}{Fore.RESET}] {Fore.MAGENTA}Play{Fore.RESET} Successful! HashID -> {Fore.GREEN}{play_tx_hash.hex()}{Fore.RESET}")
+                            Logger.gas_report(f" ⛽ Gas Used for Play: {gas_info_play['gas_used']} units | Cost: {Fore.YELLOW}{gas_info_play['gas_cost_eth']:.8f} 0G{Fore.RESET}")
                         board = result_board
                         # Hitung highest tile
                         for i in range(16):
@@ -632,7 +635,7 @@ class Game2048:
                     # Estimasi gas untuk batch
                     Logger.info(f" 🧵 [Game {self.batch_count}] Estimating gas for batch of {self.game_steps} step moves...")
                     tx_params_for_estimate = tx_params.copy()
-                    tx_params_for_estimate['gas'] = GAS_LIMIT_RANGE[1]  # Gunakan gas limit maksimum untuk estimasi
+                    tx_params_for_estimate['gas'] = GAS_LIMIT_RANGE[1]
                     # Ambil nonce terbaru sebelum estimasi
                     nonce = self.w3.eth.get_transaction_count(player_address, 'pending')
                     tx_params_for_estimate['nonce'] = nonce
@@ -651,7 +654,7 @@ class Game2048:
                         gas_limit = GAS_LIMIT_RANGE[1]
                     tx_params['gas'] = gas_limit
 
-                    Logger.info(f" 🧵 [Game {Fore.GREEN}#{self.batch_count}{Fore.RESET}] Sending batch of {self.game_steps} moves with gas limit {gas_limit}...")
+                    Logger.info(f" 🧵 [Game {self.batch_count}] Sending batch of {self.game_steps} moves with gas limit {gas_limit}...")
                     # Ambil nonce terbaru sebelum transaksi
                     nonce = self.w3.eth.get_transaction_count(player_address, 'pending')
                     tx_params['nonce'] = nonce
@@ -663,21 +666,25 @@ class Game2048:
                         ).build_transaction(tx_params)
                     submit_tx_hash, submit_receipt = self.retry_transaction(build_batch_tx, priv_key)
                     if submit_receipt is None or submit_receipt.status != 1:
-                        Logger.error(f" ↪️ [Game {Fore.GREEN}#{self.batch_count}{Fore.RESET}] Batch failed after retries.")
+                        Logger.error(f" ↪️ [Game {self.batch_count}] Batch failed after retries.")
                         return False
 
                     gas_info_submit = self.calculate_gas_cost(submit_receipt)
-                    Logger.success(f" 🧵 [Game {Fore.GREEN}#{self.batch_count}{Fore.RESET}] Batch Sent! HashID -> {Fore.GREEN}{submit_tx_hash.hex()}{Fore.RESET}")
+                    Logger.success(f"🧵 [Game {self.batch_count}] {Fore.MAGENTA}Batch Raw Log/txid{Fore.RESET} Sent! HashID -> {Fore.GREEN}{submit_tx_hash.hex()}{Fore.RESET}")
                     Logger.gas_report(f" ⛽ Gas Used for Batch: {gas_info_submit['gas_used']} units | Cost: {Fore.YELLOW}{gas_info_submit['gas_cost_eth']:.8f} 0G{Fore.RESET}")
 
                     # Parse event BatchMoves
-                    move_events = self.contract.events.BatchMoves().process_receipt(submit_receipt)
+                    move_events = []
+                    batch_moves_signature = self.w3.keccak(text="BatchMoves(address,bytes32,uint8[],uint128[])").hex()
+                    for log in submit_receipt['logs']:
+                        if len(log['topics']) > 0 and log['topics'][0].hex() == batch_moves_signature:
+                            move_events.append(self.contract.events.BatchMoves().process_log(log))
                     if move_events:
-                        Logger.info(f"Processed {len(move_events[0]['args']['moves'])} moves in 1 transaction!")
+                        Logger.info(f" 🧵 Processed {len(move_events[0]['args']['moves'])} moves in 1 transaction!")
                         for i, (move, result_board) in enumerate(zip(move_events[0]['args']['moves'], move_events[0]['args']['resultBoards'])):
                             move_str = ["Up", "Right", "Down", "Left"][move]
-                            Logger.info(f" 🧵 [Game {self.batch_count} Step #{i+1}] Recorded Move: {move_str}, Result Board: {result_board}")
-
+                            # Logger.info(f" 🧵 [Game {self.batch_count} Step #{i+1}] Recorded Move: {move_str}, Result Board: {result_board}")  # Dikommentari untuk menyembunyikan log
+                    
             # Langkah 5: Cek apakah game benar-benar selesai
             Logger.info(f" 🧵 [Game {self.batch_count}] Checking if game is over...")
             is_game_over = check_game_over(board) or current_step >= self.game_steps or current_step >= 100 or highest_tile >= 8  # Anggap selesai jika mencapai ubin 256 (2^8)
@@ -689,7 +696,7 @@ class Game2048:
             # Langkah 6: Tandai game over dengan endGame
             Logger.info(f" 🧵 [Game {self.batch_count}] Estimating gas for EndGame transaction...")
             tx_params_for_estimate = tx_params.copy()
-            tx_params_for_estimate['gas'] = GAS_LIMIT_RANGE[1]  # Gunakan gas limit maksimum untuk estimasi
+            tx_params_for_estimate['gas'] = GAS_LIMIT_RANGE[1]
             # Ambil nonce terbaru sebelum estimasi
             nonce = self.w3.eth.get_transaction_count(player_address, 'pending')
             tx_params_for_estimate['nonce'] = nonce
@@ -716,7 +723,7 @@ class Game2048:
                 return False
 
             gas_info_end_game = self.calculate_gas_cost(end_game_receipt)
-            Logger.success(f" 🧵 [Game {Fore.GREEN}#{self.batch_count}{Fore.RESET}] EndGame Successful! HashID -> {Fore.GREEN}{end_game_tx_hash.hex()}{Fore.RESET}")
+            Logger.success(f" 🧵 [Game {self.batch_count}] {Fore.MAGENTA}EndGame{Fore.RESET} Successful! HashID -> {Fore.GREEN}{end_game_tx_hash.hex()}{Fore.RESET}")
             Logger.gas_report(f" ⛽ Gas Used for EndGame: {gas_info_end_game['gas_used']} units | Cost: {Fore.YELLOW}{gas_info_end_game['gas_cost_eth']:.8f} 0G{Fore.RESET}")
 
             # Parse event GameOver
@@ -724,11 +731,11 @@ class Game2048:
             if game_over_event:
                 highest_tile = game_over_event[0]['args']['highestTile']
                 moves_count = game_over_event[0]['args']['moves']
-                Logger.info(f"Game over! Highest tile: {highest_tile}, Moves: {moves_count}")
+                Logger.info(f" 🧵 {Fore.CYAN}Game over! Highest tile: {highest_tile}, Moves: {moves_count}{Fore.RESET}")
 
             # Langkah 7: Klaim NFT secara otomatis dengan claimNFT
             Logger.info(f" 🧵 [Game {self.batch_count}] Estimating gas for ClaimNFT transaction...")
-            tx_params_for_estimate['gas'] = GAS_LIMIT_RANGE[1]  # Gunakan gas limit maksimum untuk estimasi
+            tx_params_for_estimate['gas'] = GAS_LIMIT_RANGE[1]
             # Ambil nonce terbaru sebelum estimasi
             nonce = self.w3.eth.get_transaction_count(player_address, 'pending')
             tx_params_for_estimate['nonce'] = nonce
@@ -751,33 +758,41 @@ class Game2048:
                 return self.contract.functions.claimNFT(game_id).build_transaction(tx_params)
             claim_nft_tx_hash, claim_nft_receipt = self.retry_transaction(build_claim_nft_tx, priv_key)
             if claim_nft_receipt is None or claim_nft_receipt.status != 1:
-                Logger.error(f" ↪️ [Game {Fore.GREEN}#{self.batch_count}{Fore.RESET}] ClaimNFT failed after retries.")
+                Logger.error(f" ↪️ [Game {self.batch_count}] {Fore.RED}ClaimNFT failed{Fore.RESET} after retries.")
                 return False
 
             gas_info_claim_nft = self.calculate_gas_cost(claim_nft_receipt)
-            Logger.success(f" 🧵 [Game {Fore.GREEN}#{self.batch_count}{Fore.RESET}] ClaimNFT Successful! HashID -> {Fore.GREEN}{claim_nft_tx_hash.hex()}{Fore.RESET}")
+            Logger.success(f"🧵 [Game {self.batch_count}] {Fore.MAGENTA}ClaimNFT{Fore.RESET} Successful! HashID -> {Fore.GREEN}{claim_nft_tx_hash.hex()}{Fore.RESET}")
             Logger.gas_report(f" ⛽ Gas Used for ClaimNFT: {gas_info_claim_nft['gas_used']} units | Cost: {Fore.YELLOW}{gas_info_claim_nft['gas_cost_eth']:.8f} 0G{Fore.RESET}")
 
             # Parse event NFTMinted dan PendingNFTCleared
-            nft_minted_event = self.contract.events.NFTMinted().process_receipt(claim_nft_receipt)
+            nft_minted_event = []
+            pending_cleared_event = []
+            nft_minted_signature = self.w3.keccak(text="NFTMinted(address,bytes32,uint256,uint256)").hex()
+            pending_cleared_signature = self.w3.keccak(text="PendingNFTCleared(bytes32)").hex()
+            for log in claim_nft_receipt['logs']:
+                if len(log['topics']) > 0:
+                    if log['topics'][0].hex() == nft_minted_signature:
+                        nft_minted_event.append(self.contract.events.NFTMinted().process_log(log))
+                    elif log['topics'][0].hex() == pending_cleared_signature:
+                        pending_cleared_event.append(self.contract.events.PendingNFTCleared().process_log(log))
             if nft_minted_event:
                 token_id = nft_minted_event[0]['args']['tokenId']
                 level = nft_minted_event[0]['args']['level']
                 description = self.contract.functions.getDescription(level).call()
                 uri = self.contract.functions.tokenURI(token_id).call()
-                Logger.success(f" 🎉 Congrats You get NFT {Fore.GREEN}'GAME 20G8 NFT', auto Minted!{Fore.RESET} {Fore.YELLOW}Token ID: {token_id}, Level: {level}{Fore.RESET}")
-                Logger.info(f"{Fore.GREEN}NFT Description:{Fore.RESET} {description}")
-                Logger.info(f"{Fore.GREEN}NFT Detail URI:{Fore.RESET} {uri}")
-
-            pending_cleared_event = self.contract.events.PendingNFTCleared().process_receipt(claim_nft_receipt)
+                Logger.success(f" 🧩 {Fore.CYAN}Congrats You get NFT 🎉 'GAME 20G8 NFT', Auto Minted!{Fore.RESET} {Fore.YELLOW}Token ID: {token_id}, Level: {level}{Fore.RESET}")
+                Logger.info(f" 🧩 {Fore.CYAN}NFT Description:{Fore.RESET} {description}")
+                Logger.info(f"🧩 {Fore.CYAN}NFT Detail URI:{Fore.RESET} {uri}")
             if pending_cleared_event:
-                Logger.info(f" 🧵 [Game {self.batch_count}] Pending NFT data cleared for game ID: {pending_cleared_event[0]['args']['gameId'].hex()}")
-
+                Logger.info(f" 🧵 [Game {self.batch_count}] Pending NFT cleared for gameID: {pending_cleared_event[0]['args']['gameId'].hex()}")
+            
             # Cek poin dan leaderboard
             points = self.contract.functions.getPlayerPoints(player_address).call()
-            Logger.info(f"{Fore.GREEN}Point (XP) Player:{Fore.RESET} {points}")
+            Logger.info(f"🧩 {Fore.CYAN}Point (XP) Player:{Fore.RESET} {points}")
             leaderboard = self.contract.functions.getLeaderboard().call()
-            Logger.info(f"{Fore.GREEN}Leaderboard Player:{Fore.RESET} {leaderboard}")
+            Logger.info(f"🧩 {Fore.CYAN}Leaderboard Player:{Fore.RESET} IS HIDDEN LOG")
+            # Hidden : Logger.info(f"{Fore.GREEN}Leaderboard Player:{Fore.RESET} {leaderboard}")
 
             return True
 
@@ -795,13 +810,13 @@ class Game2048:
     def run(self):
         while True:
             try:
-                Logger.info(f" 🔎 Starting {Fore.MAGENTA}2048 Game {self.batch_count}{Fore.RESET} with {Fore.YELLOW}#{self.game_steps}{Fore.RESET} moving steps...")
+                Logger.info(f" 🔎 Starting {Fore.MAGENTA}2048 Game {self.batch_count}{Fore.RESET} with random step -> {Fore.YELLOW}#{self.game_steps} moving steps...{Fore.RESET}")
                 
                 success = self.execute_game_interaction()
                 if success:
-                    Logger.warning(f" ✅ Game {Fore.GREEN}#{self.batch_count}{Fore.RESET} for wallet {Fore.GREEN}#{self.current_key_index + 1}{Fore.RESET} completed successfully")
+                    Logger.warning(f" ✅ [GAME {Fore.GREEN}{self.batch_count}{Fore.RESET}] for wallet {Fore.GREEN}#{self.current_key_index + 1}{Fore.RESET} completed successfully")
                 else:
-                    Logger.warning(f" ❌ Game {Fore.GREEN}#{self.batch_count}{Fore.RESET} for wallet {Fore.GREEN}#{self.current_key_index + 1}{Fore.RESET} failed")
+                    Logger.warning(f" ❌ [GAME {Fore.RED}{self.batch_count}{Fore.RESET}] for wallet {Fore.RED}#{self.current_key_index + 1}{Fore.RESET} failed")
 
                 cycle_completed = self.switch_wallet()
                 self.batch_count += 1
