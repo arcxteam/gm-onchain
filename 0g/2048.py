@@ -30,15 +30,22 @@ RPC_URLS = [
 GAS_LIMIT_RANGE = (100000, 3000000)
 GWEI_RANGE = (0.05, 2.0)
 CONTRACT_ADDRESS = Web3.to_checksum_address("0xdF0d5abC614EF45C4bCEA121624644523BAc80b7")
-WALLET_DELAY_RANGE = (80, 200)  # Delay antar wallet
+WALLET_DELAY_RANGE = (80, 220)  # Delay antar wallet
 GAME_CYCLE_DELAY_RANGE = (150, 420)  # Delay game over
 GAME_MODE = "off-chain"  # mode bisa pilih "on-chain" atau "off-chain"
-GAME_STEPS_RANGE = (70, 250)  # Jumlah step per game max2000 bang
+GAME_STEPS_RANGE = (70, 251)  # Jumlah step per game max2000 bang
 USE_EIP1559 = True  # False (gas legacy)
 CHAIN_ID = 16601
 TIMEOUT = 300
 
-# ABI untuk Game2048 (author @0xgrey)
+# SPDX-License-Identifier: MIT
+# @title Game2048NFT - On-Chain 2048 Game with NFT Rewards & XP
+# @author Original implementation by: 0xgrey - https://github.com/arcxteam
+# @notice A blockchain implementation of the 2048 game where players can earn NFT rewards based on their highest tile achievement
+# @dev This contract combines an ERC721 NFT collection with a fully on-chain 2048 game implementation
+# @custom:security-contact cuan@greyscope.xyz or gani@greyscope.xyz
+
+# ABI Game2048 (author @0xgrey)
 CONTRACT_ABI = [
     {"inputs": [], "stateMutability": "nonpayable", "type": "constructor"},
     {"inputs": [], "name": "GameAlreadyEnded", "type": "error"},
