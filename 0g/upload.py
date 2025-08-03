@@ -73,7 +73,7 @@ def wallet(msg):
     logger.info(f"{Fore.CYAN}[W] {msg}{Style.RESET_ALL}")
 
 def countdown(msg):
-    print(f"\r{Fore.YELLOW}[⏰] {msg}{Style.RESET_ALL}", end="")
+    print(f"\r{Fore.YELLOW} [🧩] {msg}{Style.RESET_ALL}", end="")
 
 def rotate_logs():
     """Rotasi file log untuk mencegah penggunaan disk berlebih"""
@@ -114,7 +114,7 @@ def clean_old_data_files(days=1):
 # Konfigurasi
 ZERO_G_CHAIN_ID = 16601
 ZERO_G_RPC_URL = 'https://evmrpc-testnet.0g.ai'
-ZERO_G_CONTRACT_ADDRESS = Web3.to_checksum_address('0x5f1d96895e442fc0168fa2f9fb1ebef93cb5035e')
+ZERO_G_CONTRACT_ADDRESS = Web3.to_checksum_address('0xbD75117F80b4E22698D0Cd7612d92BDb8eaff628')
 ZERO_G_METHOD_ID = '0xef3e12dc'
 PROXY_FILE = 'proxies.txt'
 INDEXER_URL = 'https://indexer-storage-testnet-turbo.0g.ai'
@@ -253,7 +253,7 @@ def fetch_random_image():
             # logger.info(f"Proxy yang digunakan: {session.proxies}")
             response = session.get(source['url'], timeout=20)
             response.raise_for_status()
-            success("🔎 Random Gambar berhasil diambil")
+            success("Random gambar 📸 berhasil diambil")
             return response.content
         except Exception as e:
             logger.error(f"Error saat mengambil gambar 🖼️ dari {source['url']}: {e}")
@@ -293,7 +293,7 @@ def fetch_crypto_prices():
         logger.warning("Tidak ada kunci API CoinGecko, melewati pengambilan harga kripto")
         return None
     try:
-        logger.info(f"{Fore.YELLOW}Mengambil data ₿itcoin prices dari CoinGecko{Fore.RESET}")
+        logger.info(f"{Fore.YELLOW}Mengambil JSON data ₿itcoin 🚀 prices dari CoinGecko{Fore.RESET}")
         url = "https://api.coingecko.com/api/v3/coins/markets"
         params = {
             "vs_currency": "usd",
@@ -377,7 +377,7 @@ def upload_to_storage(data, wallet, wallet_index):
                 timeout=20
             )
             response.raise_for_status()
-            success("Segmen file berhasil di upload...")
+            success("Segmen root hash file berhasil di upload...")
 
             # Data transaksi
             tx_data = (
