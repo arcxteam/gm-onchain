@@ -15,9 +15,8 @@ from hexbytes import HexBytes
 init(autoreset=True)
 load_dotenv()
 
-# Konfig logging
 LOG_FILE = "og_uploader.log"
-MAX_LOG_SIZE = 2 * 1024 * 1024  # 2Mb
+MAX_LOG_SIZE = 2 * 1024 * 1024  # 2MB
 MAX_LOG_FILES = 3
 
 logging.basicConfig(
@@ -30,29 +29,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-class ColoredFormatter(logging.Formatter):
-    def format(self, record):
-        level = record.levelname
-        msg = record.getMessage()
-        if level == 'INFO':
-            return f"{Fore.CYAN}[i] {msg}{Style.RESET_ALL}"
-        elif level == 'WARNING':
-            return f"{Fore.YELLOW}[!] {msg}{Style.RESET_ALL}"
-        elif level == 'ERROR':
-            return f"{Fore.RED}[x] {msg}{Style.RESET_ALL}"
-        elif level == 'CRITICAL':
-            return f"{Fore.RED}{Style.BRIGHT}[FATAL] {msg}{Style.RESET_ALL}"
-        return super().format(record)
-
-for handler in logger.handlers:
-    if isinstance(handler, logging.StreamHandler):
-        handler.setFormatter(ColoredFormatter('%(asctime)s - %(levelname)s - %(message)s'))
-
-def print_banner():
-    banner = f"""
+def banner(msg=None):
+    """Menampilkan banner dengan pesan opsional"""
+    banner_text = f"""
 {Fore.GREEN}============================ WELCOME TO Onchain DAPPs ============================{Fore.RESET}
 {Fore.YELLOW}
- ██████╗██╗   ██╗ █████╗ ███╗   ██╗███╗   ██╗ ██████╗ ██████╗ ███████╗
+ ██████╗██╗   ██║ █████╗ ███╗   ██╗███╗   ██╗ ██████╗ ██████╗ ███████╗
 ██╔════╝██║   ██║██╔══██╗████╗  ██║████╗  ██║██╔═══██╗██╔══██╗██╔════╝
 ██║     ██║   ██║███████║██╔██╗ ██║██╔██╗ ██║██║   ██║██║  ██║█████╗  
 ██║     ██║   ██║██╔══██║██║╚██╗██║██║╚██╗██║██║   ██║██║  ██║██╔══╝  
@@ -64,14 +46,16 @@ def print_banner():
 {Fore.YELLOW}           - CUANNODE By Greyscope&Co, Credit By Arcxteam -     {Fore.RESET}
 {Fore.CYAN}========================================================================={Fore.RESET}
 """
-    print(banner)
+    print(banner_text)
+    if msg:
+        logger.info(f"{Fore.GREEN}{Style.BRIGHT}{msg}{Style.RESET_ALL}")
 
 def section(msg=None):
     line = '─' * 40
-    logger.info(f"\n{Fore.GRAY}{line}{Style.RESET_ALL}")
+    logger.info(f"\n{Fore.CYAN}{line}{Style.RESET_ALL}")
     if msg:
         logger.info(f"{Fore.WHITE}{Style.BRIGHT} {msg} {Style.RESET_ALL}")
-    logger.info(f"{Fore.GRAY}{line}{Style.RESET_ALL}\n")
+    logger.info(f"{Fore.CYAN}{line}{Style.RESET_ALL}\n")
 
 def success(msg):
     logger.info(f"{Fore.GREEN}[+] {msg}{Style.RESET_ALL}")
@@ -80,19 +64,19 @@ def loading(msg):
     logger.info(f"{Fore.MAGENTA}[*] {msg}{Style.RESET_ALL}")
 
 def step(msg):
-    logger.info(f"{Fore.BLUE}[>] {Style.BRIGHT}{msg}{Style.RESET_ALL}")
+    logger.info(f"{Fore.CYAN}[>] {Style.BRIGHT}{msg}{Style.RESET_ALL}")
 
 def summary(msg):
-    logger.info(f"{Fore.GREEN}{Style.BRIGHT}[SUMMARY] {msg}{Style.RESET_ALL}")
+    logger.info(f"{Fore.YELLOW}{Style.BRIGHT}[SUMMARY] {msg}{Style.RESET_ALL}")
 
 def wallet(msg):
-    logger.info(f"{Fore.LIGHTBLUE_EX}[W] {msg}{Style.RESET_ALL}")
+    logger.info(f"{Fore.CYAN}[W] {msg}{Style.RESET_ALL}")
 
 def countdown(msg):
-    print(f"\r{Fore.BLUE}[⏰] {msg}{Style.RESET_ALL}", end="")
+    print(f"\r{Fore.YELLOW}[⏰] {msg}{Style.RESET_ALL}", end="")
 
 def rotate_logs():
-    """Rotate log files to prevent excessive disk usage"""
+    """Rotasi file log untuk mencegah penggunaan disk berlebih"""
     try:
         if os.path.exists(LOG_FILE) and os.path.getsize(LOG_FILE) > MAX_LOG_SIZE:
             for i in range(MAX_LOG_FILES - 1, 0, -1):
@@ -103,12 +87,12 @@ def rotate_logs():
                         os.remove(dst)
                     shutil.move(src, dst)
             open(LOG_FILE, 'w').close()
-            logger.info("Log file rotated")
+            logger.info("File log dirotasi")
     except Exception as e:
-        logger.error(f"Error rotating logs: {e}")
+        logger.error(f"Error saat merotasi log: {e}")
 
 def clean_old_data_files(days=1):
-    """Clean data files older than specified days"""
+    """Membersihkan file data yang lebih lama dari jumlah hari tertentu"""
     try:
         data_dir = os.getenv("DATA_DIR", "data_files")
         if not os.path.exists(data_dir):
@@ -123,11 +107,11 @@ def clean_old_data_files(days=1):
                     os.remove(filepath)
                     count += 1
         if count > 0:
-            logger.info(f"Cleaned {count} old data files (older than {days} days)")
+            logger.info(f"Membersihkan {count} file data lama (lebih dari {days} hari)")
     except Exception as e:
-        logger.error(f"Error cleaning old data files: {e}")
+        logger.error(f"Error saat membersihkan file data lama: {e}")
 
-# Konfig
+# Konfigurasi
 ZERO_G_CHAIN_ID = 16601
 ZERO_G_RPC_URL = 'https://evmrpc-testnet.0g.ai'
 ZERO_G_CONTRACT_ADDRESS = Web3.to_checksum_address('0x5f1d96895e442fc0168fa2f9fb1ebef93cb5035e')
@@ -149,11 +133,11 @@ current_proxy_index = 0
 w3 = Web3(Web3.HTTPProvider(ZERO_G_RPC_URL))
 
 def load_private_keys():
-    """Load private keys from .env and private_keys.txt"""
+    """Memuat private key dari .env dan private_keys.txt"""
     global private_keys
     private_keys = []
     
-    # Load .env
+    # Memuat dari .env
     index = 1
     while True:
         key = os.getenv(f"PRIVATE_KEY_{index}")
@@ -162,10 +146,10 @@ def load_private_keys():
         if is_valid_private_key(key):
             private_keys.append(key)
         else:
-            logger.error(f"Invalid private key format at PRIVATE_KEY_{index}")
+            logger.error(f"Format private key tidak valid pada PRIVATE_KEY_{index}")
         index += 1
     
-    # Load private_keys.txt
+    # Memuat dari private_keys.txt
     try:
         with open("private_keys.txt", "r") as file:
             keys = [line.strip() for line in file.readlines() if line.strip()]
@@ -173,20 +157,20 @@ def load_private_keys():
                 if is_valid_private_key(key):
                     private_keys.append(key)
                 else:
-                    logger.error(f"Invalid private key format in private_keys.txt: {key}")
+                    logger.error(f"Format private key tidak valid di private_keys.txt: {key}")
     except Exception as e:
-        logger.warning(f"Note: private_keys.txt not found or couldn't be read: {e}")
+        logger.warning(f"Catatan: private_keys.txt tidak ditemukan atau tidak dapat dibaca: {e}")
 
     private_keys = list(set(private_keys))
     if not private_keys:
-        logger.critical("No valid private keys found in .env or private_keys.txt")
+        logger.critical("Tidak ada private key valid yang ditemukan di .env atau private_keys.txt")
         return False
     
-    success(f"Loaded {len(private_keys)} private key(s)")
+    success(f"Memuat {len(private_keys)} private key")
     return True
 
 def is_valid_private_key(key):
-    """Validate private key format"""
+    """Memvalidasi format private key"""
     key = key.strip()
     if not key.startswith('0x'):
         key = '0x' + key
@@ -197,29 +181,29 @@ def is_valid_private_key(key):
         return False
 
 def get_next_private_key():
-    """Get the next private key"""
+    """Mengambil private key berikutnya"""
     global current_key_index
     return private_keys[current_key_index]
 
 def load_proxies():
-    """Load proxies from proxies.txt"""
+    """Memuat proxy dari proxies.txt"""
     global proxies, current_proxy_index
     try:
         if os.path.exists(PROXY_FILE):
             with open(PROXY_FILE, 'r') as file:
                 proxies = [line.strip() for line in file.readlines() if line.strip() and not line.startswith('#')]
             if proxies:
-                logger.info(f"Loaded {len(proxies)} proxies")
+                success(f"Memuat {len(proxies)} proxy")
             else:
-                logger.warning(f"No proxies found in {PROXY_FILE}")
+                logger.warning(f"Tidak ada proxy ditemukan di {PROXY_FILE}")
         else:
-            logger.warning(f"Proxy file {PROXY_FILE} not found")
+            logger.warning(f"File proxy {PROXY_FILE} tidak ditemukan")
     except Exception as e:
-        logger.error(f"Failed to load proxies: {e}")
+        logger.error(f"Gagal memuat proxy: {e}")
     current_proxy_index = 0
 
 def get_next_proxy():
-    """Get the next proxy"""
+    """Mengambil proxy berikutnya"""
     global current_proxy_index
     if not proxies:
         return None
@@ -228,7 +212,7 @@ def get_next_proxy():
     return proxy
 
 def create_session():
-    """Create a requests session with proxy and headers"""
+    """Membuat sesi requests dengan proxy dan header"""
     session = requests.Session()
     session.headers.update({
         'User-Agent': random.choice([
@@ -244,67 +228,72 @@ def create_session():
     return session
 
 def initialize_wallet():
-    """Initialize wallet with the current private key"""
+    """Inisialisasi wallet dengan private key saat ini"""
     private_key = get_next_private_key()
     return w3.eth.account.from_key(private_key)
 
 def check_network_sync():
-    """Check if the 0G network is synced"""
+    """Memeriksa apakah jaringan 0G sudah tersinkronisasi"""
     try:
-        loading("Checking 0G network sync...")
+        loading("Memeriksa sinkronisasi jaringan 0G...")
         block_number = w3.eth.block_number
-        success(f"0G Network synced at block {block_number}")
+        logger.info(f"Sinkronsi Jaringan 0G pada blok no {Fore.YELLOW}{block_number}{Fore.RESET}")
         return True
     except Exception as e:
-        logger.error(f"0G Network sync check failed: {e}")
+        logger.error(f"Pemeriksaan sinkronisasi jaringan 0G gagal: {e}")
         return False
 
 def fetch_random_image():
-    """Fetch a random image from predefined sources"""
-    try:
-        loading("Fetching random image...")
-        session = create_session()
-        source = random.choice(IMAGE_SOURCES)
-        response = session.get(source['url'], timeout=10)
-        response.raise_for_status()
-        success("Image fetched successfully")
-        return response.content
-    except Exception as e:
-        logger.error(f"Error fetching image: {e}")
-        raise
+    """Mengambil gambar acak dari sumber yang ditentukan"""
+    for source in IMAGE_SOURCES:
+        try:
+            logger.info(f"{Fore.YELLOW}Mengambil gambar 🖼️  dari sumber {source['url']}{Fore.RESET}")
+            session = create_session()
+            # logger.info(f"Header permintaan: {session.headers}")
+            # logger.info(f"Proxy yang digunakan: {session.proxies}")
+            response = session.get(source['url'], timeout=20)
+            response.raise_for_status()
+            success("🔎 Random Gambar berhasil diambil")
+            return response.content
+        except Exception as e:
+            logger.error(f"Error saat mengambil gambar 🖼️ dari {source['url']}: {e}")
+            if source != IMAGE_SOURCES[-1]:
+                logger.info("Mencoba sumber gambar berikutnya...")
+            else:
+                raise Exception(f"Gagal mengambil gambar dari semua sumber (terakhir: {source['url']}): {e}. Periksa proxy atau koneksi.")
 
 def check_file_exists(file_hash):
-    """Check if a file hash already exists on the indexer"""
+    """Memeriksa apakah hash file sudah ada di indexer"""
     try:
-        loading(f"Checking file hash {file_hash}...")
+        loading(f"Memeriksa root hash (merkle tree) {file_hash}...")
         session = create_session()
-        response = session.get(f"{INDEXER_URL}/file/info/{file_hash}", timeout=10)
+        response = session.get(f"{INDEXER_URL}/file/info/{file_hash}", timeout=20)
         return response.json().get('exists', False)
     except Exception as e:
-        logger.warning(f"Failed to check file hash: {e}")
+        logger.warning(f"Gagal memeriksa root hash (merkle tree): {e}")
         return False
 
 def prepare_image_data(image_buffer):
-    """Prepare image data with unique hash"""
+    """Menyiapkan data gambar dengan hash unik"""
     MAX_HASH_ATTEMPTS = 5
     for attempt in range(1, MAX_HASH_ATTEMPTS + 1):
         hash_input = image_buffer + os.urandom(16)
         hash_obj = hashlib.sha256(hash_input)
         file_hash = '0x' + hash_obj.hexdigest()
         if not check_file_exists(file_hash):
-            success(f"Generated unique file hash: {file_hash}")
+            success(f"Menghasilkan root hash file unik {file_hash}...")
             return {'root': file_hash, 'data': image_buffer.hex()}
-        logger.warning(f"Hash {file_hash} already exists, retrying...")
-    raise Exception(f"Failed to generate unique hash after {MAX_HASH_ATTEMPTS} attempts")
+        logger.warning(f"Root Hash {file_hash} sudah ada, mencoba lagi...")
+    raise Exception(f"Gagal menghasilkan hash unik setelah {MAX_HASH_ATTEMPTS} percobaan")
 
 def fetch_crypto_prices():
-    """Fetch cryptocurrency price data from CoinGecko"""
+    """Mengambil data harga kripto dari CoinGecko"""
     api_key = os.getenv("COINGECKO_API_KEY")
     if not api_key:
-        logger.warning("No CoinGecko API key provided, skipping crypto price fetch")
+        logger.warning("Tidak ada kunci API CoinGecko, melewati pengambilan harga kripto")
         return None
     try:
-        logger.info("Fetching data from CoinGecko API")
+        logger.info(f"{Fore.YELLOW}Mengambil data ₿itcoin prices dari CoinGecko{Fore.RESET}")
         url = "https://api.coingecko.com/api/v3/coins/markets"
         params = {
             "vs_currency": "usd",
@@ -320,7 +309,7 @@ def fetch_crypto_prices():
         }
         headers = {"accept": "application/json", "x-cg-demo-api-key": api_key}
         session = create_session()
-        response = session.get(url, headers=headers, params=params, timeout=30)
+        response = session.get(url, headers=headers, params=params, timeout=20)
         response.raise_for_status()
         data = response.json()
         structured_data = {
@@ -339,11 +328,11 @@ def fetch_crypto_prices():
             }
         return structured_data
     except Exception as e:
-        logger.error(f"Error fetching crypto price data: {e}")
+        logger.error(f"Error saat mengambil data harga kripto: {e}")
         return None
 
 def save_data_to_file(data, source_name):
-    """Save data to file in data_files directory"""
+    """Menyimpan data ke file di direktori data_files"""
     data_dir = os.getenv("DATA_DIR", "data_files")
     os.makedirs(data_dir, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -359,22 +348,22 @@ def save_data_to_file(data, source_name):
             json.dump(data, f)
     
     file_size_kb = os.path.getsize(filepath) / 1024
-    logger.info(f"Saved {source_name} data to {filepath} ({file_size_kb:.2f}KB)")
+    logger.info(f"Menyimpan data {source_name} ke {filepath} ({file_size_kb:.2f}KB)")
     return filepath
 
 def upload_to_storage(data, wallet, wallet_index):
-    """Upload data to storage and submit to contract"""
-    MAX_RETRIES = 3
-    TIMEOUT_SECONDS = 300
-    loading(f"Checking wallet balance for {wallet.address}...")
+    """Mengunggah data ke penyimpanan dan mengirim ke kontrak"""
+    MAX_RETRIES = 5
+    TIMEOUT_SECONDS = 101
+    logger.info(f"Memeriksa saldo wallet untuk {wallet.address}...")
     balance = w3.eth.get_balance(wallet.address)
     if balance < Web3.to_wei(0.0015, 'ether'):
-        raise Exception(f"Insufficient balance: {Web3.from_wei(balance, 'ether')} OG")
-    success(f"Wallet balance: {Web3.from_wei(balance, 'ether')} OG")
+        raise Exception(f"Saldo tidak cukup: {Web3.from_wei(balance, 'ether')} OG")
+    logger.info(f"{Fore.YELLOW}Saldo wallet: {Web3.from_wei(balance, 'ether')} OG{Fore.RESET}")
 
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            loading(f"Uploading file for wallet #{wallet_index + 1} (Attempt {attempt})...")
+            loading(f"Mengunggah file untuk wallet #{wallet_index + 1} -> Percobaan ke {attempt}...")
             session = create_session()
             response = session.post(
                 f"{INDEXER_URL}/file/segment",
@@ -385,12 +374,12 @@ def upload_to_storage(data, wallet, wallet_index):
                     'proof': {'siblings': [data['root']], 'path': []}
                 },
                 headers={'content-type': 'application/json'},
-                timeout=10
+                timeout=20
             )
             response.raise_for_status()
-            success("File segment uploaded")
+            success("Segmen file berhasil di upload...")
 
-            # Data transactions
+            # Data transaksi
             tx_data = (
                 HexBytes(ZERO_G_METHOD_ID) +
                 HexBytes('0000000000000000000000000000000000000000000000000000000000000020') +
@@ -403,10 +392,10 @@ def upload_to_storage(data, wallet, wallet_index):
                 HexBytes('0000000000000000000000000000000000000000000000000000000000000000')
             )
 
-            value = Web3.to_wei('0.0000102407', 'ether')
-            gas_price = w3.eth.gas_price or Web3.to_wei('1.03', 'gwei')
+            value = Web3.to_wei('0.000010001', 'ether')
+            gas_price = w3.eth.gas_price or Web3.to_wei('1.033', 'gwei')
 
-            loading("Estimating gas...")
+            loading("get estimasi gas bang...")
             try:
                 gas_estimate = w3.eth.estimate_gas({
                     'to': ZERO_G_CONTRACT_ADDRESS,
@@ -415,12 +404,12 @@ def upload_to_storage(data, wallet, wallet_index):
                     'value': value
                 })
             except Exception as e:
-                logger.warning(f"Failed to accurately estimate gas, using a higher default. Error: {e}")
-                gas_estimate = 300000
+                logger.warning(f"Gagal memperkirakan gas dengan akurat, menggunakan default lebih tinggi. Error: {e}")
+                gas_estimate = 300003
             gas_limit = int(gas_estimate * 1.1)
-            success(f"Gas limit set: {gas_limit}")
+            success(f"Batas limit gas tersedia: {gas_limit}")
 
-            loading("Sending transaction...")
+            loading("Mengirim transaksi...")
             nonce = w3.eth.get_transaction_count(wallet.address, 'latest')
             tx = {
                 'to': ZERO_G_CONTRACT_ADDRESS,
@@ -432,49 +421,49 @@ def upload_to_storage(data, wallet, wallet_index):
                 'gas': gas_limit
             }
             signed_tx = wallet.sign_transaction(tx)
-            tx_hash = w3.eth.send_raw_transaction(signed_tx.raw_transaction)
-            logger.info(f"Transaction sent: {EXPLORER_URL}{tx_hash.hex()}")
+            tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
+            logger.info(f"Transaksi terkirim: {EXPLORER_URL}{tx_hash.hex()}")
 
-            loading(f"Waiting for confirmation ({TIMEOUT_SECONDS}s)...")
+            loading(f"{Fore.YELLOW}Menunggu konfirmasi {TIMEOUT_SECONDS} detik...{Fore.RESET}")
             receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=TIMEOUT_SECONDS)
             if receipt and receipt.status == 1:
-                success(f"Transaction confirmed in block {receipt.blockNumber}")
+                success(f"Transaksi dikonfirmasi pada blok {receipt.blockNumber}")
                 return receipt
             else:
-                raise Exception(f"Transaction failed (status 0): {EXPLORER_URL}{tx_hash.hex()}")
+                raise Exception(f"Transaksi gagal (status 0): {EXPLORER_URL}{tx_hash.hex()}")
         except Exception as e:
-            logger.error(f"Upload attempt {attempt} failed: {e}")
+            logger.error(f"Percobaan upload {attempt} gagal: {e}")
             if hasattr(e, 'receipt') and e.receipt:
-                logger.error(f"Transaction Receipt Status: {e.receipt.status}")
-                logger.error(f"Transaction Hash: {e.receipt.hash}")
+                logger.error(f"Status Receipt Transaksi: {e.receipt.status}")
+                logger.error(f"Hash Transaksi: {e.receipt.transactionHash.hex()}")
             if attempt < MAX_RETRIES:
-                countdown_delay(15, "Retrying in")
+                countdown_delay(15, "Mencoba lagi dalam")
             else:
                 raise
     return None
 
 def run_uploads(count_per_wallet):
-    """Run uploads for all wallets"""
+    """Menjalankan upload untuk semua wallet"""
     banner("0G Storage Uploader")
     if not load_private_keys():
         return
     load_proxies()
 
-    loading("Checking 0G network status...")
+    loading("Memeriksa status jaringan 0G...")
     chain_id = w3.eth.chain_id
     if chain_id != ZERO_G_CHAIN_ID:
-        raise Exception(f"Invalid chainId: expected {ZERO_G_CHAIN_ID}, got {chain_id}")
-    success(f"Connected to 0G network: chainId {chain_id}")
+        raise Exception(f"chainId tidak valid: diharapkan {ZERO_G_CHAIN_ID}, mendapatkan {chain_id}")
+    logger.info(f"Terhubung ke jaringan 0G: chainId {chain_id}")
     if not check_network_sync():
-        raise Exception("0G Network is not synced")
+        raise Exception("Jaringan 0G tidak tersinkronisasi")
 
-    step("Available Wallets:")
+    step("Wallet yang Tersedia:")
     for i, key in enumerate(private_keys, 1):
         wallet = w3.eth.account.from_key(key)
         logger.info(f"[{i}] {wallet.address}")
 
     total_uploads = count_per_wallet * len(private_keys)
-    logger.info(f"Starting {total_uploads} uploads ({count_per_wallet} per wallet)")
+    logger.info(f"Memulai {total_uploads} upload ({count_per_wallet} per wallet)")
     successful = 0
     failed = 0
 
@@ -482,7 +471,7 @@ def run_uploads(count_per_wallet):
     for wallet_index in range(len(private_keys)):
         current_key_index = wallet_index
         wallet = initialize_wallet()
-        section(f"Processing Wallet #{wallet_index + 1} [{wallet.address}]")
+        section(f"Memproses Wallet {Fore.MAGENTA}#{wallet_index + 1} [{wallet.address}]{Fore.RESET}")
 
         for i in range(1, count_per_wallet + 1):
             upload_number = (wallet_index * count_per_wallet) + i
@@ -499,74 +488,69 @@ def run_uploads(count_per_wallet):
                     data_type = "crypto_prices"
                     crypto_data = fetch_crypto_prices()
                     if not crypto_data:
-                        raise Exception("Failed to fetch crypto prices")
+                        raise Exception("Gagal mengambil harga kripto")
                     filepath = save_data_to_file(crypto_data, data_type)
                     data = prepare_image_data(json.dumps(crypto_data).encode())
 
                 receipt = upload_to_storage(data, wallet, wallet_index)
                 successful += 1
-                success(f"Upload {upload_number} completed")
+                success(f"Upload file {upload_number} selesai")
                 if os.path.exists(filepath):
-                    logger.info(f"Removing uploaded file: {filepath}")
+                    logger.info(f"Menghapus file yang diunggah: {filepath}")
                     os.remove(filepath)
                 if upload_number < total_uploads:
-                    countdown_delay(15, "Waiting for next upload in")
+                    countdown_delay(300, "Menunggu upload berikutnya dalam")  # Jeda 5 menit
             except Exception as e:
                 failed += 1
-                logger.error(f"Upload {upload_number} failed: {e}")
-                countdown_delay(10, "Continuing after error in")
+                logger.error(f"Upload {upload_number} gagal: {e}")
+                countdown_delay(300, "Melanjutkan setelah error dalam")  # Jeda 5 menit
         if wallet_index < len(private_keys) - 1:
-            countdown_delay(30, "Switching to next wallet in")
+            countdown_delay(300, "Beralih ke wallet berikutnya dalam")  # Jeda 5 menit
 
-    section("Upload Summary")
-    summary(f"Total wallets: {len(private_keys)}")
-    summary(f"Total attempted: {total_uploads}")
+    section("Ringkasan upload")
+    summary(f"Total wallet: {len(private_keys)}")
+    summary(f"Total mencoba: {total_uploads}")
     if successful > 0:
-        success(f"Successful: {successful}")
+        success(f"Berhasil: {successful}")
     if failed > 0:
-        logger.error(f"Failed: {failed}")
+        logger.error(f"Gagal: {failed}")
 
 def countdown_delay(duration_in_seconds, message):
-    """Display countdown for delay"""
+    """Menampilkan hitungan mundur untuk jeda"""
     for i in range(duration_in_seconds, 0, -1):
         hours = i // 3600
         minutes = (i % 3600) // 60
         seconds = i % 60
-        time_string = f"{hours}h " if hours > 0 else ""
+        time_string = f"{hours}j " if hours > 0 else ""
         time_string += f"{minutes}m " if minutes > 0 else ""
-        time_string += f"{seconds}s"
+        time_string += f"{seconds}d"
         countdown(f"{message} {time_string}")
         time.sleep(1)
     print()
 
 def main():
-    """Main function to start the uploader"""
+    """Fungsi utama untuk memulai uploader"""
     twenty_four_hours_in_seconds = 24 * 60 * 60
     def get_random_upload_count():
-        return random.randint(10, 20)
-
-    banner("0G Storage Uploader")
-    
-    def run_uploader_cycle():
-        try:
-            upload_count = get_random_upload_count()
-            logger.info(f"Starting new cycle with {upload_count} uploads per wallet")
-            run_uploads(upload_count)
-            logger.info("0G Uploader cycle finished.")
-            next_run_time = datetime.now() + timedelta(seconds=twenty_four_hours_in_seconds)
-            logger.info(f"Next cycle will start in 24 hours at {next_run_time.strftime('%d/%m/%Y %H:%M:%S')}")
-        except Exception as e:
-            logger.critical(f"An error occurred during the uploader cycle: {e}")
-            logger.info("Retrying in 24 hours gaes!!...")
+        return random.randint(10, 25)  # random upload per wallet
 
     while True:
-        run_uploader_cycle()
-        countdown_delay(twenty_four_hours_in_seconds, "Waiting for next cycle in")
+        try:
+            upload_count = get_random_upload_count()
+            logger.info(f"Memulai siklus baru dengan {upload_count} upload per wallet")
+            run_uploads(upload_count)
+            logger.info("Siklus uploader 0G selesai.")
+            next_run_time = datetime.now() + timedelta(seconds=twenty_four_hours_in_seconds)
+            logger.info(f"Siklus berikutnya akan dimulai pada {next_run_time.strftime('%d/%m/%Y %H:%M:%S')}")
+            countdown_delay(twenty_four_hours_in_seconds, "Menunggu siklus berikutnya dalam")
+        except Exception as e:
+            logger.critical(f"Terjadi error selama siklus uploader: {e}")
+            countdown_delay(300, "Mencoba lagi setelah error dalam")  # Jeda 5 menit sebelum coba lagi
 
 if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        logger.info(f"{Fore.YELLOW}Program interrupted by user{Style.RESET_ALL}")
+        logger.info(f"{Fore.YELLOW}Program dihentikan run dengan pm2 bang{Style.RESET_ALL}")
     except Exception as e:
-        logger.critical(f"An unexpected error occurred: {e}")
+        logger.critical(f"Terjadi error gilak: {e}")
