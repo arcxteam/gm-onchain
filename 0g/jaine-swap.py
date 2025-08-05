@@ -28,13 +28,13 @@ MESSAGES = {
 CONFIG = {
     "RPC_URLS": os.getenv(
         "RPC_URLS",
-        "https://evmrpc-testnet.0g.ai,https://0g-testnet-rpc.astrostake.xyz,https://rpc.ankr.com/0g_newton"
+        "https://evmrpc-testnet.0g.ai,https://0g-testnet-rpc.astrostake.xyz"
     ).split(","),
     "PRIVATE_KEY_FILE": os.path.join(os.path.dirname(__file__), "private_keys.txt"),
     "ENV_FILE": ".env",
     "MAX_RETRIES": 5,
     "GAS_MULTIPLIER": 0.3,
-    "MAX_PRIORITY_GWEI": 0.5, # EIP1559
+    "MAX_PRIORITY_GWEI": 0.4, # EIP1559
     "GAS_LIMIT": 250000,
     "COOLDOWN": {"SUCCESS": (20, 60), "ERROR": (20, 60)}, # detik bang
     "WALLET_SWITCH_DELAY": (100, 200), # detik
